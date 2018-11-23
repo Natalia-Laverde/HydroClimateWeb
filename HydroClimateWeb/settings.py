@@ -31,6 +31,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'odm2admin.apps.Odm2AdminConfig',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -122,3 +123,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
+
+""" EXPORTDB FLAG CONFIGURATION - if set to true this will use Camel case table names for SQLite"""
+EXPORTDB = True
+""" EXPORTDB FLAG CONFIGURATION """
