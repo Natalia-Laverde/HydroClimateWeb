@@ -1,4 +1,8 @@
+import re
+import uuid
 from django.db import models
+from urllib.parse import urlparse
+from django.core import management
 
 
 # ======================================================================================================================
@@ -111,7 +115,7 @@ class CvDirectiveType(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'ODM2.CvDirectiveType'
         ordering = ['term', 'name']
 
@@ -224,7 +228,7 @@ class CvReferenceMaterialMedium(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'ODM2.CvReferenceMaterialMedium'
         ordering = ['term', 'name']
 
@@ -256,7 +260,7 @@ class CvResultType(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'CvResultType'
         ordering = ['term', 'name']
 
@@ -272,7 +276,7 @@ class CvMedium(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'ODM2.CvMedium'
         ordering = ['term', 'name']
 
@@ -288,7 +292,7 @@ class CvSamplingFeatureGeoType(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'ODM2.CvSamplingFeatureGeoType'
         verbose_name = 'sampling feature geo type'
         ordering = ['term', 'name']
@@ -322,7 +326,7 @@ class CvSiteType(models.Model):
         return u"%s" % self.name
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'ODM2.CvSiteType'
         ordering = ['term', 'name']
 
@@ -412,7 +416,7 @@ class CvTaxonomicClassifierType(models.Model):
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
+    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
@@ -685,7 +689,7 @@ class CalibrationActions(models.Model):
 # ======================================================================================================================
 class CalibrationReferenceEquipment(models.Model):
     bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('CalibrationActions', db_column='actionId', on_delete=models.CASCADE)
+    actionId = models.ForeignKey(CalibrationActions, db_column='actionId', on_delete=models.CASCADE)
     equipmentId = models.ForeignKey('Equipment', db_column='equipmentId', on_delete=models.CASCADE)
 
     class Meta:
@@ -698,7 +702,7 @@ class CalibrationReferenceEquipment(models.Model):
 # ======================================================================================================================
 class CalibrationStandards(models.Model):
     bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('CalibrationActions', db_column='actionId', on_delete=models.CASCADE)
+    actionId = models.ForeignKey(CalibrationActions, db_column='actionId', on_delete=models.CASCADE)
     referenceMaterialId = models.ForeignKey('ReferenceMaterials', db_column='referenceMaterialId',
                                             on_delete=models.CASCADE)
 
@@ -745,7 +749,7 @@ class CategoricalResultValueAnnotations(models.Model):
 # ======================================================================================================================
 class CategoricalResultValues(models.Model):
     valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey('CategoricalResults', db_column='resultId',
+    resultId = models.ForeignKey(CategoricalResults, db_column='resultId',
                                  on_delete=models.CASCADE)
     dataValue = models.CharField(max_length=255)
     valueDatetime = models.DateTimeField()
@@ -921,53 +925,505 @@ class DataLoggerFileColumns(models.Model):
                                  on_delete=models.CASCADE)
     dataLoggerFileId = models.ForeignKey('DataLoggerFiles', verbose_name="data logger file",
                                          db_column='dataLoggerFileId', on_delete=models.CASCADE)
-    instrumentoutputvariableid = models.ForeignKey('Instrumentoutputvariables',
+    instrumentOutputVariableId = models.ForeignKey('InstrumentOutputVariables',
                                                    verbose_name="instrument output variable",
-                                                   db_column='instrumentoutputvariableid',
-                                                   on_delete=models.CASCADE)
-    columnlabel = models.CharField(verbose_name="column label", max_length=50)
-    columndescription = models.CharField(verbose_name="column description",
+                                                   db_column='instrumentOutputVariableId', on_delete=models.CASCADE)
+    columnLabel = models.CharField(verbose_name="column label", max_length=50)
+    columnDescription = models.CharField(verbose_name="column description",
                                          help_text="To disble ingestion of a column type skip, " +
                                                    "or to specify a column as the date time enter datetime" +
                                                    " if the datetime is an excel format numeric datetime" +
                                                    " enter exceldatetime",
                                          max_length=5000,
                                          blank=True)
-    measurementequation = models.CharField(verbose_name="measurement equation", max_length=255,
+    measurementEquation = models.CharField(verbose_name="measurement equation", max_length=255,
                                            blank=True)
-    scaninterval = models.FloatField(verbose_name="scan interval (time)", blank=True, null=True)
-    scanintervalunitsid = models.ForeignKey('Units', verbose_name="scan interval units",
-                                            related_name='relatedScanIntervalUnitsid',
-                                            db_column='scanintervalunitsid',
+    scanInterval = models.FloatField(verbose_name="scan interval (time)", blank=True, null=True)
+    scanIntervalUnitsId = models.ForeignKey('Units', verbose_name="scan interval units",
+                                            related_name='relatedScanIntervalUnitsId',
+                                            db_column='scanIntervalUnitsId',
                                             blank=True, null=True,
                                             on_delete=models.CASCADE)
-    recordinginterval = models.FloatField(verbose_name="recording interval", blank=True, null=True)
-    recordingintervalunitsid = models.ForeignKey('Units', verbose_name="recording interval units",
-                                                 related_name='relatedRecordingintervalunitsid',
-                                                 db_column='recordingintervalunitsid', blank=True,
+    recordingInterval = models.FloatField(verbose_name="recording interval", blank=True, null=True)
+    recordingIntervalUnitsId = models.ForeignKey('Units', verbose_name="recording interval units",
+                                                 related_name='relatedRecordingIntervalUnitsId',
+                                                 db_column='recordingIntervalUnitsId', blank=True,
                                                  null=True,
                                                  on_delete=models.CASCADE)
-    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic,
+    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic,
                                                verbose_name="aggregation statistic",
-                                               db_column='aggregationstatisticcv', blank=True,
+                                               db_column='aggregationStatisticCV', blank=True,
                                                null=True,
                                                on_delete=models.CASCADE)
 
     def __str__(self):
-        # s = u"%s" % (self.dataloggerfileid)
-        s = u"Label: %s," % self.columnlabel
+        s = u"Label: %s," % self.columnLabel
         # s += u" Description: %s," % (self.columndescription)
-        s += u" Result: %s" % self.resultid
+        s += u" Result: %s" % self.resultId
         return s
 
     class Meta:
-        managed = False
-        _exportdb = settings.EXPORTDB
-        if _exportdb:
-            db_table = r'DataloggerFileColumns'
-        else:
-            db_table = r'dataloggerfilecolumns'
-        _exportdb = settings.EXPORTDB
+        managed = True
+        db_table = 'ODM2.DataLoggerFileColumns'
         verbose_name = 'data logger file column'
+
+
+# ======================================================================================================================
+# Data logger files table
+# ======================================================================================================================
+class DataLoggerFiles(models.Model):
+    dataLoggerFileId = models.AutoField(primary_key=True)
+    programId = models.ForeignKey('DataLoggerProgramFiles', db_column='programId', on_delete=models.CASCADE)
+    dataLoggerFileName = models.CharField(max_length=255, verbose_name="Data logger file name")
+    dataLoggerFileDescription = models.CharField(max_length=5000, blank=True,
+                                                 verbose_name="Data logger file description")
+    dataLoggerFileLink = models.FileField(upload_to='dataLoggerFiles', verbose_name="Data logger file")  # upload_to='.'
+
+    def data_logger_file_link_name(self):
+        return self.dataLoggerFileLink.name
+
+    def __str__(self):
+        s = u"%s" % self.dataLoggerFileName
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.DataLoggerFiles'
+        verbose_name = 'data logger file'
+
+
+# ======================================================================================================================
+# Process data logger file table
+# ======================================================================================================================
+class ProcessDataLoggerFile(models.Model):
+    processDataLoggerFileId = models.AutoField(primary_key=True)
+    dataLoggerFileId = models.ForeignKey(DataLoggerFiles,
+                                         help_text="CAUTION data logger file columns must be setup" +
+                                                   ", the date and time stamp is expected to " +
+                                                   "be the first column, " + " column names must match " +
+                                                   "the column name in associated " + "dataLoggerFileColumns.",
+                                         verbose_name='data logger file', db_column='dataLoggerFileId',
+                                         on_delete=models.CASCADE)
+    processingCode = models.CharField(max_length=255, verbose_name='processing code',
+                                      help_text="to setup an FTP file download set the processing" +
+                                      "code as 'x hours between download' where x is how many hours to " +
+                                      "wait between downloading copies of the file from the FTP site. " +
+                                      "A data logger file setup for FTP download must have only 1 " +
+                                      "process data logger file record.", default="0")
+    dataBeginsOn = models.IntegerField(verbose_name="Data begins on this row number", default=2)
+    columnHeadersOn = models.IntegerField(
+        verbose_name="Column headers matching column labels from data logger columns on row")
+    dateProcessed = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        s = u"%s" % self.dataLoggerFileId
+        s += u"- Processed on %s" % self.dateProcessed
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2EXTRA.ProcessDataLoggerFile'
+        verbose_name = 'process data logger file'
+
+    def save(self, *args, **kwargs):
+        link_name = str(self.dataLoggerFileId.dataLoggerFileLink.name)
+        file_id = self.dataLoggerFileId.dataLoggerFileId
+        ftp_file = self.dataLoggerFileId.dataLoggerFileDescription
+        ftp_parse = urlparse(ftp_file)
+        if len(ftp_parse.netloc) > 0:
+            ftp_frequency_hours = re.findall(r'^\D*(\d+)', self.processingCode)[0]
+            management.call_command('update_preprocess_process_datalogger_file', link_name, str(file_id)
+                                    , str(self.dataBeginsOn), str(self.columnHeadersOn),
+                                    str(ftp_frequency_hours), False)
+        else:
+            management.call_command('ProcessDataLoggerFile', link_name, str(file_id)
+                                    , str(self.dataBeginsOn), str(self.columnHeadersOn),
+                                    False, False, False)
+        super(ProcessDataLoggerFile, self).save(*args, **kwargs)
+
+
+# ======================================================================================================================
+# Data logger program files table
+# ======================================================================================================================
+class DataLoggerProgramFiles(models.Model):
+    programId = models.AutoField(primary_key=True)
+    affiliationId = models.ForeignKey(Affiliations, db_column='affiliationId', on_delete=models.CASCADE)
+    programName = models.CharField(max_length=255)
+    programDescription = models.CharField(max_length=5000, blank=True)
+    programVersion = models.CharField(max_length=50, blank=True)
+    programFileLink = models.FileField(upload_to='dataLoggerProgramFiles')
+
+    # + '/' + programname.__str__() settings.settings.MEDIA_ROOT upload_to='/upfiles/'
+
+    def __str__(self):
+        s = u"%s" % self.programName
+        s += u"- Version %s" % self.programVersion
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.DataLoggerProgramFiles'
+        verbose_name = 'data logger program file'
+
+
+# ======================================================================================================================
+# Data quality table
+# ======================================================================================================================
+class DataQuality(models.Model):
+    dataQualityId = models.AutoField(primary_key=True)
+    dataQualityTypeCV = models.ForeignKey(CvDataQualityType, db_column='dataQualityTypeCV',
+                                          verbose_name="data quality type", on_delete=models.CASCADE)
+    dataQualityCode = models.CharField(max_length=255, verbose_name="data quality code",
+                                       help_text="for an alarm test include the word alarm." +
+                                                 " for a hard bounds check include the word bound (if a value" +
+                                                 " falls below a lower limit, or exceeds a lower limit the " +
+                                                 "value will be set to NaN (not a number). ")
+    dataQualityValue = models.FloatField(blank=True, null=True, verbose_name="data quality value")
+    dataQualityValueUnitsId = models.ForeignKey('Units', related_name='+',
+                                                db_column='dataQualityValueUnitsId',
+                                                verbose_name="data quality value units", blank=True, null=True,
+                                                on_delete=models.CASCADE)
+    dataQualityDescription = models.CharField(max_length=5000, blank=True, verbose_name="data quality description")
+    dataQualityLink = models.CharField(max_length=255, blank=True, verbose_name="data quality link")
+
+    def __str__(self):
+        return u"%s - %s - %s" % (
+            self.dataQualityCode, self.dataQualityValue, self.dataQualityValueUnitsId)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.DataQuality'
+        verbose_name = 'data quality'
+        verbose_name_plural = 'data quality'
+
+
+# ======================================================================================================================
+# Dataset citations table
+# ======================================================================================================================
+class DatasetCitations(models.Model):
+    bridgeId = models.AutoField(primary_key=True)
+    datasetId = models.ForeignKey('Datasets', verbose_name='dataset', db_column='datasetId', on_delete=models.CASCADE)
+    relationshipTypeCV = models.ForeignKey(CvRelationshipType, verbose_name='relationship type',
+                                           db_column='relationshipTypeCV', on_delete=models.CASCADE)
+    citationId = models.ForeignKey(Citations, db_column='citationId', verbose_name='citation', on_delete=models.CASCADE)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.DatasetCitations'
+        verbose_name = 'dataset citation'
+
+
+# ======================================================================================================================
+# Datasets table
+# ======================================================================================================================
+class Datasets(models.Model):
+    datasetId = models.AutoField(primary_key=True)
+    datasetUUID = models.UUIDField(default=uuid.uuid4, editable=False)
+    datasetTypeCV = models.ForeignKey(CvDatasetTypeCV, verbose_name="dataset type",
+                                      db_column='datasetTypeCV', on_delete=models.CASCADE)
+    datasetCode = models.CharField(verbose_name="dataset code", max_length=50)
+    datasetTitle = models.CharField(verbose_name="dataset title", max_length=255)
+    datasetAbstract = models.CharField(verbose_name="dataset abstract", max_length=5000)
+
+    def __str__(self):
+        s = u"%s" % self.datasetCode
+        if self.datasetTitle:
+            s += u"- %s" % self.datasetTitle
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.Datasets'
+        verbose_name = 'dataset'
+
+
+# ======================================================================================================================
+# Dataset results table
+# ======================================================================================================================
+class DatasetsResults(models.Model):
+    bridgeId = models.AutoField(primary_key=True)
+    datasetId = models.ForeignKey(Datasets, verbose_name="dataset", db_column='datasetId', on_delete=models.CASCADE)
+    resultId = models.ForeignKey('Results', verbose_name="add the dataset to the result", db_column='resultId',
+                                 on_delete=models.CASCADE)
+
+    def __str__(self):
+        s = u"%s" % self.datasetId
+        if self.resultId:
+            s += u"- %s" % self.resultId
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.DatasetsResults'
+        verbose_name = 'dataset result'
+
+
+# ======================================================================================================================
+# Derivation equations table
+# ======================================================================================================================
+class DerivationEquations(models.Model):
+    derivationEquationId = models.AutoField(primary_key=True)
+    derivationEquation = models.CharField(max_length=255, verbose_name='derivation equation')
+
+    def __str__(self):
+        s = u"%s" % self.derivationEquation
+        return s
+    class Meta:
+        managed = True
+        db_table = r'ODM2.DerivationEquations'
+        verbose_name = 'derivation equation'
+
+
+# ======================================================================================================================
+# Directives table
+# ======================================================================================================================
+class Directives(models.Model):
+    directiveId = models.AutoField(primary_key=True)
+    directiveTypeCV = models.ForeignKey(CvDirectiveType, db_column='directiveTypeCV',
+                                        on_delete=models.CASCADE)
+    directiveDescription = models.CharField(max_length=500)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.Directives'
+
+
+# ======================================================================================================================
+# Equipment table
+# ======================================================================================================================
+class Equipment(models.Model):
+    equipmentId = models.AutoField(primary_key=True)
+    equipmentCode = models.CharField(max_length=50)
+    equipmentName = models.CharField(max_length=255)
+    equipmentTypeCV = models.ForeignKey(CvEquipmentType, db_column='equipmentTypeCV', on_delete=models.CASCADE)
+    equipmentModelId = models.ForeignKey('EquipmentModels', db_column='equipmentModelId', on_delete=models.CASCADE)
+    equipmentSerialNumber = models.CharField(max_length=50)
+    equipmentOwnerId = models.ForeignKey('People', db_column='equipmentOwnerId', on_delete=models.CASCADE)
+    equipmentVendorId = models.ForeignKey('Organizations', db_column='equipmentVendorId', on_delete=models.CASCADE)
+    equipmentPurchaseDate = models.DateTimeField()
+    equipmentPurchaseOrderNumber = models.CharField(max_length=50, blank=True)
+    equipmentDescription = models.CharField(max_length=5000, blank=True)
+    equipmentDocumentationLink = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.Equipment'
+
+
+# ======================================================================================================================
+# Equipment annotations table
+# ======================================================================================================================
+class EquipmentAnnotations(models.Model):
+    bridgeId = models.AutoField(primary_key=True)
+    equipmentId = models.ForeignKey(Equipment, db_column='equipmentId', on_delete=models.CASCADE)
+    annotationId = models.ForeignKey(Annotations, db_column='annotationId',
+                                     on_delete=models.CASCADE)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.EquipmentAnnotations'
+
+
+# ======================================================================================================================
+# Equipment models table
+# ======================================================================================================================
+class EquipmentModels(models.Model):
+    equipmentModelId = models.AutoField(primary_key=True)
+    modelManufacturerId = models.ForeignKey('Organizations', verbose_name="model manufacturer",
+                                            db_column='modelManufacturerId', on_delete=models.CASCADE)
+    modelPartNumber = models.CharField(max_length=50, blank=True, verbose_name="model part number")
+    modelName = models.CharField(max_length=255, verbose_name="model name")
+    modelDescription = models.CharField(max_length=5000, blank=True, null=True, verbose_name="model description")
+    isInstrument = models.BooleanField(verbose_name="Is this an instrument?")
+    modelSpecificationsFileLink = models.CharField(max_length=255, verbose_name="link to manual for equipment",
+                                                   blank=True)
+    modelLink = models.CharField(max_length=255, verbose_name="link to website for model", blank=True)
+
+    def __str__(self):
+        s = u"%s" % self.modelName
+        if self.modelPartNumber:
+            s += u"- %s" % self.modelPartNumber
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.EquipmentModels'
+        verbose_name = "equipment model"
+
+
+# ======================================================================================================================
+# Equipment used table
+# ======================================================================================================================
+class EquipmentUsed(models.Model):
+    bridgeId = models.AutoField(primary_key=True)
+    actionId = models.ForeignKey(Actions, db_column='actionId', on_delete=models.CASCADE)
+    equipmentId = models.ForeignKey(Equipment, db_column='equipmentId', on_delete=models.CASCADE)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.EquipmentUsed'
+
+
+# ======================================================================================================================
+# Extension properties table
+# ======================================================================================================================
+class ExtensionProperties(models.Model):
+    propertyId = models.AutoField(primary_key=True)
+    propertyName = models.CharField(max_length=255, verbose_name="property name")
+    propertyDescription = models.CharField(max_length=5000, blank=True, verbose_name="property description")
+    propertyDataTypeCV = models.ForeignKey(CvPropertyDataType, db_column='propertyDataTypeCV',
+                                           verbose_name="property data type", on_delete=models.CASCADE)
+    propertyUnitsId = models.ForeignKey('Units', db_column='propertyUnitsId', blank=True, null=True,
+                                        verbose_name="units for property", on_delete=models.CASCADE)
+
+    def __str__(self):
+        return u"%s - %s" % (self.propertyName, self.propertyDescription)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.ExtensionProperties'
+        verbose_name = 'extension property'
+        verbose_name_plural = 'extension properties'
+
+
+# ======================================================================================================================
+# External identifier systems table
+# ======================================================================================================================
+class ExternalIdentifierSystems(models.Model):
+    externalIdentifierSystemId = models.AutoField(primary_key=True)
+    externalIdentifierSystemName = models.CharField(max_length=255)
+    identifierSystemOrganizationId = models.ForeignKey('Organizations', db_column='identifierSystemOrganizationId',
+                                                       on_delete=models.CASCADE)
+    externalIdentifierSystemDescription = models.CharField(max_length=5000, blank=True)
+    externalIdentifierSystemURL = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return u"%s" % self.externalIdentifierSystemName
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.ExternalIdentifierSystems'
+
+
+# ======================================================================================================================
+# Feature actions table
+# ======================================================================================================================
+class FeatureActions(models.Model):
+    featureActionId = models.AutoField(primary_key=True, verbose_name="sampling feature action")
+    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', on_delete=models.CASCADE)
+    action = models.ForeignKey(Actions, db_column='actionId', on_delete=models.CASCADE)
+
+    def __str__(self):
+        return u"%s- %s - %s" % (self.featureActionId, self.samplingFeatureId, self.action)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.FeatureActions'
+        verbose_name = 'action at sampling feature'
+        verbose_name_plural = 'action at sampling feature'
+
+
+# ======================================================================================================================
+# Feature actions names table
+# ======================================================================================================================
+# this class just stores the unicode representation of a featureAction for faster lookup
+class FeatureActionsNames(models.Model):
+    featureActionNamesId = models.AutoField(primary_key=True)
+    featureActionId = models.ForeignKey('FeatureActions', db_column='featureactionId',
+                                        on_delete=models.CASCADE)
+    name = models.CharField(max_length=500)
+
+    def __str__(self):
+        return u"%s" % self.name
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2EXTRA.FeatureActionsNames'
+        verbose_name = 'feature action names'
+
+
+# ======================================================================================================================
+# Instrument output variables table
+# ======================================================================================================================
+class InstrumentOutputVariables(models.Model):
+    instrumentOutputVariableId = models.AutoField(primary_key=True)
+    modelId = models.ForeignKey(EquipmentModels, verbose_name="equipment model", db_column='modelId',
+                                on_delete=models.CASCADE)
+    variableId = models.ForeignKey('Variables', verbose_name="variable", db_column='variableId',
+                                   on_delete=models.CASCADE)
+    instrumentMethodId = models.ForeignKey('Methods', verbose_name="instrument method", db_column='instrumentMethodId',
+                                           on_delete=models.CASCADE)
+    instrumentResolution = models.CharField(max_length=255, verbose_name="instrument resolution", blank=True)
+    instrumentAccuracy = models.CharField(max_length=255, verbose_name="instrument accuracy", blank=True)
+    instrumentRawOutputUnitsId = models.ForeignKey('Units', related_name='+', verbose_name="instrument raw output unit",
+                                                   db_column='instrumentRawOutputUnitsId', on_delete=models.CASCADE)
+
+    def __str__(self):
+        s = u"%s " % self.modelId
+        s += u"- %s" % self.variableId
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.InstrumentOutputVariables'
+        verbose_name = "instrument output variable"
+
+
+# ======================================================================================================================
+# Maintenance actions table
+# ======================================================================================================================
+class MaintenanceActions(models.Model):
+    actionId = models.OneToOneField(Actions, db_column='actionId', primary_key=True, on_delete=models.CASCADE)
+    isFactoryService = models.BooleanField()
+    maintenanceCode = models.CharField(max_length=50, blank=True)
+    maintenanceReason = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.MaintenanceActions'
+
+
+# ======================================================================================================================
+# Measurement results table
+# ======================================================================================================================
+class MeasurementResults(models.Model):
+    resultId = models.OneToOneField('Results', verbose_name="Result Series", db_column='resultId', primary_key=True,
+                                    on_delete=models.CASCADE)
+    xLocation = models.FloatField(verbose_name="x location", blank=True, null=True)
+    xLocationUnitsId = models.ForeignKey('Units', verbose_name="x location units", related_name='relatedXLocationUnits',
+                                         db_column='xLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
+    yLocation = models.FloatField(blank=True, verbose_name="y location", null=True)
+    yLocationUnitsId = models.ForeignKey('Units', verbose_name="y location units", related_name='relatedYLocationUnits',
+                                         db_column='yLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
+    zLocation = models.FloatField(blank=True, verbose_name="z location", null=True)
+    zLocationUnitsId = models.ForeignKey('Units', verbose_name="z location units", related_name='relatedZLocationUnits',
+                                         db_column='zLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
+    spatialReferenceId = models.ForeignKey('SpatialReferences', verbose_name="spatial reference",
+                                           db_column='spatialReferenceId', blank=True, null=True,
+                                           on_delete=models.CASCADE)
+    censorCodeCV = models.ForeignKey(CvCensorCode, verbose_name="censor code", db_column='censorCodeCV',
+                                     on_delete=models.CASCADE)
+    qualityCodeCV = models.ForeignKey(CvQualityCode, verbose_name="quality code", db_column='qualitycodecv',
+                                      on_delete=models.CASCADE)
+    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, verbose_name="aggregation statistic",
+                                               db_column='aggregationStatisticCV', on_delete=models.CASCADE)
+    timeAggregationInterval = models.FloatField(verbose_name="time aggregation interval")
+    timeAggregationIntervalUnitsId = models.ForeignKey('Units',
+                                                       verbose_name="time aggregation " +
+                                                                    "interval unit",
+                                                       related_name='+',
+                                                       db_column='timeaggregationintervalunitsid',
+                                                       on_delete=models.CASCADE)
+
+    def __str__(self):
+        s = u"%s " % self.resultId
+        s += u", %s" % self.qualityCodeCV
+        return s
+
+    class Meta:
+        managed = True
+        db_table = 'ODM2.MeasurementResults'
+        ordering = ['censorcodecv', 'resultid']
+        verbose_name = 'measurement result'
 
 
