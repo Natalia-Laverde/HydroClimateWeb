@@ -12,6 +12,18 @@ https://docs.djangoproject.com/en/2.1/ref/settings/
 
 import os
 
+# ======================================================================================================================
+# Names configuration
+# ======================================================================================================================
+APP_NAME = "odm2admin" # This has to match the name of the folder that the app is saved
+VERBOSE_NAME = "ODM2 Administrator"
+
+SITE_HEADER = "ODM2 Administrator"
+SITE_TITLE = "ODM2 Administrator"
+
+# ======================================================================================================================
+# Base directory
+# ======================================================================================================================
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -127,3 +139,16 @@ STATIC_URL = '/static/'
 """ EXPORTDB FLAG CONFIGURATION - if set to true this will use Camel case table names for SQLite"""
 EXPORTDB = True
 """ EXPORTDB FLAG CONFIGURATION """
+
+
+# ======================================================================================================================
+# Media configuration
+# ======================================================================================================================
+""" MEDIA CONFIGURATION """
+# Absolute filesystem path to the directory that will hold user-uploaded files.
+MEDIA_ROOT = '{}/{}/upfiles/'.format(BASE_DIR, APP_NAME)
+#  URL that handles the media served from MEDIA_ROOT.
+MEDIA_URL = '/{}/{}/media/'.format(os.path.basename(BASE_DIR), APP_NAME)
+""" END MEDIA CONFIGURATION """
+# Absolute filesystem path to the directory that will hold database export and import files
+FIXTURE_DIR = '{}/{}/fixtures/'.format(BASE_DIR, APP_NAME)
