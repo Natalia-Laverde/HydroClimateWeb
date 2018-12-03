@@ -2298,7 +2298,6 @@ class ResultNormalizationValues(models.Model):
 # ======================================================================================================================
 # Results table
 # ======================================================================================================================
-@python_2_unicode_compatible
 class Results(models.Model):
     resultId = models.AutoField(primary_key=True, verbose_name="data result")
     resultUUID = models.UUIDField(default=uuid.uuid4, editable=False)
@@ -2311,13 +2310,11 @@ class Results(models.Model):
                                    on_delete=models.CASCADE)
     unitsId = models.ForeignKey('Units', verbose_name='units', related_name='+', db_column='unitsId',
                                  on_delete=models.CASCADE)
-    taxonomicClassifierId = models.ForeignKey('Taxonomicclassifiers', verbose_name='taxonomic classifier',
-                                              db_column='taxonomicclassifierid', blank=True, null=True,
+    taxonomicClassifierId = models.ForeignKey('TaxonomicClassifiers', verbose_name='taxonomic classifier',
+                                              db_column='taxonomicClassifierId', blank=True, null=True,
                                               on_delete=models.CASCADE)
-    processing_level = models.ForeignKey(Processinglevels, db_column='processinglevelid',
-                                         on_delete=models.CASCADE)
-    resultdatetime = models.DateTimeField(verbose_name='Start result date time', blank=True,
-                                          null=True)
+    processing_level = models.ForeignKey(ProcessingLevels, db_column='processingLevelId', on_delete=models.CASCADE)
+    resultDateTime = models.DateTimeField(verbose_name='Start result date time', blank=True, null=True)
     resultdatetimeutcoffset = models.BigIntegerField(
         verbose_name='Start result date time UTC offset', default=4,
         null=True)
