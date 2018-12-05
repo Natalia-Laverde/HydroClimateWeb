@@ -154,7 +154,7 @@ class CvDataQualityType(models.Model):
         ordering = ['term', 'name']
 
 
-class CvDatasetTypeCV(models.Model):
+class CvDatasetType(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
@@ -166,7 +166,7 @@ class CvDatasetTypeCV(models.Model):
 
     class Meta:
         managed = True
-        db_table = 'ODM2.CvDatasetTypeCV'
+        db_table = 'ODM2.CvDatasetType'
         ordering = ['term', 'name']
 
 
@@ -1185,7 +1185,7 @@ class DatasetCitations(models.Model):
 class Datasets(models.Model):
     datasetId = models.AutoField(primary_key=True)
     datasetUUID = models.UUIDField(default=uuid.uuid4, editable=False)
-    datasetTypeCV = models.ForeignKey(CvDatasetTypeCV, verbose_name="dataset type",
+    datasetTypeCV = models.ForeignKey(CvDatasetType, verbose_name="dataset type",
                                       db_column='datasetTypeCV', on_delete=models.CASCADE)
     datasetCode = models.CharField(verbose_name="dataset code", max_length=50)
     datasetTitle = models.CharField(verbose_name="dataset title", max_length=255)
