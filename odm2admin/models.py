@@ -53,7 +53,7 @@ def build_citation(s, self):
     return s
 
 
-def handle_uploaded_file(f, Id):
+def handle_uploaded_file(f, citation_id):
     destination = io.open(settings.MEDIA_ROOT + '/resultValues/' + f.name + '.csv', 'wb+')
     for chunk in f.chunks():
         destination.write(chunk)
@@ -65,7 +65,7 @@ def handle_uploaded_file(f, Id):
             for row in reader:
                 date_t = time.strptime(row[0], "%m/%d/%Y %H:%M")  # '1/1/2013 0:10
                 date_str = time.strftime("%Y-%m-%d %H:%M", date_t)
-                MeasurementResultValues(resultid=id, datavalue=row[1], valuedatetime=date_str,
+                MeasurementResultValues(resultid=citation_id, datavalue=row[1], valuedatetime=date_str,
                                         valuedatetimeutcoffset=4).save()
     except IndexError:
         raise ValidationError('encountered a problem with row ' + row)
@@ -327,7 +327,7 @@ class CvResultType(models.Model):
 
     class Meta:
         managed = True
-        db_table = 'CvResultType'
+        db_table = 'ODM2.CvResultType'
         ordering = ['term', 'name']
 
 
@@ -441,7 +441,7 @@ class CvSpecimenMedium(models.Model):
 
     class Meta:
         managed = True
-        db_table = 'ODM2.CvMedium'
+        db_table = 'ODM2.CvSpecimenMedium'
         ordering = ['term', 'name']
 
 
@@ -1490,7 +1490,7 @@ class MeasurementResults(models.Model):
     class Meta:
         managed = True
         db_table = 'ODM2.MeasurementResults'
-        ordering = ['censorcodecv', 'resultid']
+        ordering = ['censorCodeCV', 'resultId']
         verbose_name = 'measurement result'
 
 
@@ -1852,7 +1852,7 @@ class PointCoverageResultValues(models.Model):
                                          on_delete=models.CASCADE)
     yLocation = models.FloatField()
     yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId',
-                                          on_delete=models.CASCADE)
+                                         on_delete=models.CASCADE)
     censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
     qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
 
@@ -2028,7 +2028,7 @@ class ProfileResultValues(models.Model):
 class ReferenceMaterialExternalIdentifiers(models.Model):
     bridgeId = models.AutoField(primary_key=True)
     referenceMaterialId = models.ForeignKey('ReferenceMaterials', db_column='referenceMaterialId',
-                                             on_delete=models.CASCADE)
+                                            on_delete=models.CASCADE)
     externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
                                                    on_delete=models.CASCADE)
     referenceMaterialExternalIdentifier = models.CharField(max_length=255)
@@ -2262,7 +2262,7 @@ class ResultDerivationEquations(models.Model):
     class Meta:
         managed = True
         db_table = 'ODM2.ResultDerivationEquations'
-        verbose_name= 'result derivation equation'
+        verbose_name = 'result derivation equation'
 
 
 # ======================================================================================================================
@@ -2310,7 +2310,7 @@ class Results(models.Model):
     variableId = models.ForeignKey('Variables', verbose_name='variable', db_column='variableid',
                                    on_delete=models.CASCADE)
     unitsId = models.ForeignKey('Units', verbose_name='units', related_name='+', db_column='unitsId',
-                                 on_delete=models.CASCADE)
+                                on_delete=models.CASCADE)
     taxonomicClassifierId = models.ForeignKey('TaxonomicClassifiers', verbose_name='taxonomic classifier',
                                               db_column='taxonomicClassifierId', blank=True, null=True,
                                               on_delete=models.CASCADE)
@@ -2357,7 +2357,7 @@ class Results(models.Model):
         managed = True
         db_table = 'ODM2.Results'
         verbose_name = 'data result'
-        ordering = ["variableid"]
+        ordering = ["variableId"]
 
 
 # ======================================================================================================================
@@ -2368,6 +2368,7 @@ class ResultsDataQuality(models.Model):
     resultId = models.ForeignKey(Results, db_column='resultid', verbose_name='result', on_delete=models.CASCADE)
     dataQualityId = models.ForeignKey(DataQuality, db_column='dataqualityid', verbose_name='data quality',
                                       on_delete=models.CASCADE)
+
     def __str__(self):
         return u"%s - %s" % (self.resultId, self.dataQualityId)
 
@@ -2456,10 +2457,10 @@ class SamplingFeatures(models.Model):
                                                   max_length=5000, blank=True)
     samplingFeatureGeoType = models.ForeignKey(CvSamplingFeatureGeoType, db_column='samplingFeatureGeoTypeCV',
                                                default="Point", null=True, on_delete=models.CASCADE)
-    featureGeometry = models.TextField(verbose_name='feature geometry', blank=True, null=True)  # GeometryField This field type is a guess.
+    featureGeometry = models.TextField(verbose_name='feature geometry', blank=True, null=True)
     elevation_m = models.FloatField(verbose_name='elevation', blank=True, null=True)
     elevationDatumCV = models.ForeignKey(CvElevationDatum, db_column='elevationDatumCV', blank=True, null=True,
-                                        on_delete=models.CASCADE)
+                                         on_delete=models.CASCADE)
     objects = GeoManager()
 
     def feature_geometry_wkt(self):
@@ -2787,22 +2788,22 @@ class TaxonomicClassifierExternalIdentifiers(models.Model):
         db_table = 'ODM2.TaxonomicClassifierExternalIdentifiers'
 
 
-            # I needed to add a sequence and set it as the default for the primary
-            # key to make the Taxonomic Classifiers class work
-            # this is the SQL
+# I needed to add a sequence and set it as the default for the primary
+# key to make the Taxonomic Classifiers class work
+# this is the SQL
 
-            # CREATE SEQUENCE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
-            #   INCREMENT 1
-            #   MINVALUE 2
-            #   MAXVALUE 9223372036854775807
-            #   START 3
-            #   CACHE 1;
-            # ALTER TABLE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
-            #   OWNER TO postgres;
+# CREATE SEQUENCE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
+#   INCREMENT 1
+#   MINVALUE 2
+#   MAXVALUE 9223372036854775807
+#   START 3
+#   CACHE 1;
+# ALTER TABLE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
+#   OWNER TO postgres;
 
-            # ALTER TABLE odm2.taxonomicclassifiers
-            #  ALTER COLUMN taxonomicclassifierid SET DEFAULT nextval
-            # ('odm2.taxonomicclassifiers_taxonomicclassifiersid_seq'::regclass);
+# ALTER TABLE odm2.taxonomicclassifiers
+#  ALTER COLUMN taxonomicclassifierid SET DEFAULT nextval
+# ('odm2.taxonomicclassifiers_taxonomicclassifiersid_seq'::regclass);
 
 
 # ======================================================================================================================
@@ -2811,24 +2812,19 @@ class TaxonomicClassifierExternalIdentifiers(models.Model):
 class TaxonomicClassifiers(models.Model):
     taxonomicClassifierId = models.AutoField(primary_key=True)
     taxonomicClassifierType = models.ForeignKey(CvTaxonomicClassifierType, db_column='taxonomicClassifierTypeCV',
-                                                  help_text="A vocabulary for describing "
-                                                            "types of taxonomies from which "
-                                                            "descriptive terms used "
-                                                            "in an ODM2 database have been drawn. "
-                                                            "Taxonomic classifiers provide "
-                                                            "a way to classify"
-                                                            " Results and Specimens "
-                                                            "according to terms from a formal "
-                                                            "taxonomy.. Check "
-                                                            "http://vocabulary.odm2.org/"
-                                                            "taxonomicclassifiertype/  "
-                                                            "for more info",
+                                                help_text="A vocabulary for describing types of taxonomies from which "
+                                                          "descriptive terms used "
+                                                          "in an ODM2 database have been drawn. "
+                                                          "Taxonomic classifiers provide a way to classify"
+                                                          " Results and Specimens according to terms from a formal "
+                                                          "taxonomy.. Check http://vocabulary.odm2.org/"
+                                                          "taxonomicclassifierType/ for more info",
                                                 on_delete=models.CASCADE)
     taxonomicClassifierName = models.CharField(verbose_name='taxonomic classifier name', max_length=255)
     taxonomicClassifierCommonName = models.CharField(verbose_name='taxonomic classifier common name', max_length=255,
                                                      blank=True)
     taxonomicClassifierDescription = models.CharField(verbose_name='taxonomic classifier description', max_length=5000,
-                                                       blank=True)
+                                                      blank=True)
     parentTaxonomicClassifier = models.ForeignKey('self', db_column='parentTaxonomicClassifierId', blank=True,
                                                   null=True, on_delete=models.CASCADE)
 
@@ -2897,7 +2893,7 @@ class TimeSeriesResultValueAnnotations(models.Model):
 
     class Meta:
         managed = True
-        db_table = r'TimeSeriesResultValueAnnotations'
+        db_table = 'ODM2.TimeSeriesResultValueAnnotations'
 
 
 # ======================================================================================================================
@@ -2934,8 +2930,7 @@ class TimeSeriesResultValues(models.Model):
     def csv_output(self):
         s = str(self.valueId)
         s += ', {0}'.format(self.valueDateTime)
-        s += ',\" {0}\"'.format(
-            self.resultId.resultId.featureActionId.samplingFeatureId.samplingFeatureName)
+        s += ',\" {0}\"'.format(self.resultId.resultId.featureActionId.samplingFeatureId.samplingFeatureName)
         s = build_citation(s, self)
         return s
 
@@ -2989,11 +2984,11 @@ class TimeSeriesResultValuesExt(models.Model):
                                                        on_delete=models.DO_NOTHING)
     samplingFeatureName = models.CharField(verbose_name='sampling feature name', max_length=255, blank=True, null=True)
     samplingFeatureType = models.ForeignKey(CvSamplingFeatureType, db_column='samplingFeatureTypeCV',
-                                              on_delete=models.DO_NOTHING)
+                                            on_delete=models.DO_NOTHING)
     processingLevelCode = models.CharField(verbose_name='processing level code', max_length=50)
     variableCode = models.CharField(verbose_name='variable code', max_length=50)
     unitsAbbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
-    aggregationStatisticName = models.CharField(primary_key=True, max_length=255)
+    aggregationStatisticName = models.CharField(max_length=255)
 
     def __str__(self):
         s = u"%s " % self.resultId
@@ -3064,7 +3059,7 @@ class TimeSeriesResultValuesExtAnnotations(models.Model):
     processingLevelCode = models.CharField(verbose_name='processing level code', max_length=50)
     variableCode = models.CharField(verbose_name='variable code', max_length=50)
     unitsAbbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
-    aggregationStatisticName = models.CharField(primary_key=True, max_length=255)
+    aggregationStatisticName = models.CharField(max_length=255)
     annotationText = models.CharField(max_length=500)
 
     def __str__(self):
@@ -3282,7 +3277,7 @@ class Units(models.Model):
 
     class Meta:
         managed = True
-        ordering = ('unitsabbreviation', 'unitsname',)
+        ordering = ('unitsAbbreviation', 'unitsName',)
         db_table = 'ODM2.Units'
         verbose_name = 'unit'
 
