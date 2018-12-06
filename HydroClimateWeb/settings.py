@@ -15,7 +15,7 @@ import os
 # ======================================================================================================================
 # Names configuration
 # ======================================================================================================================
-APP_NAME = "odm2admin" # This has to match the name of the folder that the app is saved
+APP_NAME = "odm2admin"  # This has to match the name of the folder that the app is saved
 VERBOSE_NAME = "ODM2 Administrator"
 
 SITE_HEADER = "ODM2 Administrator"
@@ -88,14 +88,28 @@ WSGI_APPLICATION = 'HydroClimateWeb.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'ODM2COL',
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': 'odm2col',
         'USER': 'postgres',
         'PASSWORD': 'postgres',
         'HOST': 'localhost',
-        'PORT': '',
+        'PORT': '5432',
+        'OPTIONS': {
+            'options': '-c search_path=public,admin,odm2,odm2extra'
+        }
     }
 }
+# 'odm2': {
+#     'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#     'OPTIONS': {
+#         'options': '-c search_path=odm2,public'
+#     },
+#     'NAME': 'ODM2COL',
+#     'USER': 'postgres',
+#     'PASSWORD': 'postgres',
+#     'HOST': 'localhost',
+#     'PORT': '',
+# }
 
 
 # Password validation
