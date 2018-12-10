@@ -151,7 +151,7 @@ USE_TZ = True
 STATIC_URL = '/static/'
 
 """ EXPORTDB FLAG CONFIGURATION - if set to true this will use Camel case table names for SQLite"""
-EXPORTDB = True
+EXPORTDB = False
 """ EXPORTDB FLAG CONFIGURATION """
 
 

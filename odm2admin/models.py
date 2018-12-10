@@ -1,51 +1,83 @@
+# This is an auto-generated Django model module.
+# You'll have to do the following manually to clean this up:
+#   * Rearrange models' order
+#   * Make sure each model has one field with primary_key=True
+#   * Remove `managed = False` lines if you wish to allow Django to create, modify,
+# and delete the table
+# Feel free to rename the models, but don't rename db_table values or field names.
+#
+# Also note: You'll have to insert the output of 'django-admin.py sqlcustom [app_label]'
+# into your database.
+from __future__ import unicode_literals
+
 import io
 import re
-import uuid
 import csv
+import uuid
 import time
-import HydroClimateWeb.settings as settings
-
 from django.db import models
 from urllib.parse import urlparse
 from django.core import management
+from django.db.models import UUIDField
+from django.core.management import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.db.models import Manager as GeoManager
 from django.core.exceptions import ValidationError
+from django.utils.encoding import python_2_unicode_compatible
 
 
 # ======================================================================================================================
 # Auxiliary functions
 # ======================================================================================================================
+def handle_uploaded_file(f, handle_id):
+    destination = io.open(settings.MEDIA_ROOT + '/resultvalues/' + f.name + '.csv', 'wb+')
+    for chunk in f.chunks():
+        destination.write(chunk)
+
+    destination.close()
+    try:
+        with io.open(settings.MEDIA_ROOT + '/resultvalues/' + f.name + '.csv', 'rt', encoding='ascii') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                dateT = time.strptime(row[0], "%m/%d/%Y %H:%M")  # '1/1/2013 0:10
+                datestr = time.strftime("%Y-%m-%d %H:%M", dateT)
+                Measurementresultvalues(resultid=handle_id, datavalue=row[1], valuedatetime=datestr,
+                                        valuedatetimeutcoffset=-5).save()
+    except IndexError:
+        raise ValidationError('encountered a problem with row ' + row)
+
+
 def build_citation(s, self):
     result = None
-    if hasattr(self.resultId, 'resultId'):
+    if hasattr(self.resultid, 'resultid'):
         result = self.resultid.resultid
     else:
-        result = Results.objects.get(resultId=self.resultId)
-    dataset_results = DatasetsResults.objects.filter(resultId=result)
-    ds_citations = DatasetCitations.objects.filter(datasetid__in=dataset_results.values("datasetId"))
-    citations = Citations.objects.filter(citationid__in=ds_citations.values("citationId"))
+        result = Results.objects.get(resultid=self.resultid)
+    datasetresults = Datasetsresults.objects.filter(resultid=result)
+    dsCitations = Datasetcitations.objects.filter(datasetid__in=datasetresults.values("datasetid"))
+    citations = Citations.objects.filter(citationid__in=dsCitations.values("citationid"))
 
-    author_count = 0
+    authcount = 0
     if citations.count() == 0:
         s += ','
         return s
     for citation in citations:
-        cited_authors = AuthorLists.objects.filter(citationId=citation.citationId).order_by("authorOrder")
-        cited_persons = People.objects.filter(personId__in=cited_authors.values("personId"))
-        for cited_author in cited_authors:
-            for author in cited_persons:
-                if cited_author.personId.personId == author.personId:
-                    if author_count == 0:
-                        s += ',\" {0}'.format(author.personLastName)
+        citedauthors = Authorlists.objects.filter(citationid=citation.citationid).order_by(
+            "authororder")
+        citedpersons = People.objects.filter(personid__in=citedauthors.values("personid"))
+        for citedauthor in citedauthors:
+            for author in citedpersons:
+                if citedauthor.personid.personid == author.personid:
+                    if authcount == 0:
+                        s += ',\" {0}'.format(author.personlastname)
                     else:
-                        s += ' {0}'.format(author.personLastName)
+                        s += ' {0}'.format(author.personlastname)
 
-                    author_count += 1
-                    if author_count == cited_persons.count():
-                        s += ' {0}.'.format(author.personFirstName)
+                    authcount += 1
+                    if authcount == citedpersons.count():
+                        s += ' {0}.'.format(author.personfirstname)
                     else:
-                        s += ' {0},'.format(author.personFirstName)
+                        s += ' {0},'.format(author.personfirstname)
         s += ' {0}'.format(citation.title)
         s += '. {0}'.format(citation.publisher)
         s += ', {0}'.format(citation.publicationyear)
@@ -53,28 +85,10 @@ def build_citation(s, self):
     return s
 
 
-def handle_uploaded_file(f, citation_id):
-    destination = io.open(settings.MEDIA_ROOT + '/resultValues/' + f.name + '.csv', 'wb+')
-    for chunk in f.chunks():
-        destination.write(chunk)
-
-    destination.close()
-    try:
-        with io.open(settings.MEDIA_ROOT + '/resultValues/' + f.name + '.csv', 'rt', encoding='ascii') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                date_t = time.strptime(row[0], "%m/%d/%Y %H:%M")  # '1/1/2013 0:10
-                date_str = time.strftime("%Y-%m-%d %H:%M", date_t)
-                MeasurementResultValues(resultid=citation_id, datavalue=row[1], valuedatetime=date_str,
-                                        valuedatetimeutcoffset=4).save()
-    except IndexError:
-        raise ValidationError('encountered a problem with row ' + row)
-
-
 # ======================================================================================================================
-# Controlled Vocabularies
+# Controlled Vocabulary
 # ======================================================================================================================
-class CvActionType(models.Model):
+class CvActiontype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
@@ -86,249 +100,309 @@ class CvActionType(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'cv_actiontype'
-        verbose_name = 'Action Type CV'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_ActionType'
+        else:
+            db_table = r'cv_actiontype'
         ordering = ['term', 'name']
 
 
-class CvAggregationStatistic(models.Model):
+class CvAggregationstatistic(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvAggregationStatistic'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_AggregationStatistic'
+        else:
+            db_table = r'cv_aggregationstatistic'
         ordering = ['term', 'name']
 
 
-class CvAnnotationType(models.Model):
+class CvAnnotationtype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvAnnotationType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_AnnotationType'
+        else:
+            db_table = r'cv_annotationtype'
         ordering = ['term', 'name']
 
 
-class CvCensorCode(models.Model):
+class CvCensorcode(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvCensorCode'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_CensorCode'
+        else:
+            db_table = r'cv_censorcode'
         ordering = ['term', 'name']
 
 
-class CvDataQualityType(models.Model):
+class CvDataqualitytype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvDataQualityType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_DataQualityType'
+        else:
+            db_table = r'cv_dataqualitytype'
         ordering = ['term', 'name']
 
 
-class CvDatasetType(models.Model):
+class CvDatasettypecv(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvDatasetType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_DatasetType'
+        else:
+            db_table = r'cv_datasettype'
         ordering = ['term', 'name']
 
 
-class CvDirectiveType(models.Model):
+class CvDirectivetype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvDirectiveType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_DirectiveType'
+        else:
+            db_table = r'cv_directivetype'
         ordering = ['term', 'name']
 
 
-class CvElevationDatum(models.Model):
+class CvElevationdatum(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvElevationDatum'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_ElevationDatum'
+        else:
+            db_table = r'cv_elevationdatum'
         verbose_name = 'elevation datum'
         ordering = ['term', 'name']
 
 
-class CvEquipmentType(models.Model):
+class CvEquipmenttype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvEquipmentType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_EquipmentType'
+        else:
+            db_table = r'cv_equipmenttype'
         ordering = ['term', 'name']
 
 
-class CvMethodType(models.Model):
+class CvMethodtype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvMethodType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_MethodType'
+        else:
+            db_table = r'cv_methodtype'
         ordering = ['term', 'name']
 
 
-class CvOrganizationType(models.Model):
+class CvOrganizationtype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvOrganizationType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_OrganizationType'
+        else:
+            db_table = r'cv_organizationtype'
         ordering = ['term', 'name']
 
 
-class CvPropertyDataType(models.Model):
+class CvPropertydatatype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvPropertyDataType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_PropertyDataType'
+        else:
+            db_table = r'cv_propertydatatype'
         ordering = ['term', 'name']
 
 
-class CvQualityCode(models.Model):
+class CvQualitycode(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvQualityCode'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_QualityCode'
+        else:
+            db_table = r'cv_qualitycode'
+        _exportdb = settings.EXPORTDB
         ordering = ['term', 'name']
 
 
-class CvReferenceMaterialMedium(models.Model):
+class CvReferencematerialmedium(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvReferenceMaterialMedium'
+        db_table = r'cv_referencematerialmedium'
         ordering = ['term', 'name']
 
 
-class CvRelationshipType(models.Model):
+class CvRelationshiptype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvRelationshipType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_RelationshipType'
+        else:
+            db_table = r'cv_relationshiptype'
         ordering = ['term', 'name']
 
 
-class CvResultType(models.Model):
+class CvResulttype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvResultType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_ResultType'
+        else:
+            db_table = r'cv_resulttype'
         ordering = ['term', 'name']
 
 
@@ -337,80 +411,101 @@ class CvMedium(models.Model):
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvMedium'
+        db_table = r'cv_medium'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_Medium'
+        else:
+            db_table = r'cv_medium'
         ordering = ['term', 'name']
 
 
-class CvSamplingFeatureGeoType(models.Model):
+class CvSamplingfeaturegeotype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSamplingFeatureGeoType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_SamplingFeatureGeoType'
+        else:
+            db_table = r'cv_samplingfeaturegeotype'
         verbose_name = 'sampling feature geo type'
         ordering = ['term', 'name']
 
 
-class CvSamplingFeatureType(models.Model):
+class CvSamplingfeaturetype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSamplingFeatureType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_SamplingFeatureType'
+        else:
+            db_table = r'cv_samplingfeaturetype'
         verbose_name = 'sampling feature type'
         ordering = ['term', 'name']
 
 
-class CvSiteType(models.Model):
+class CvSitetype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSiteType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_SiteType'
+        else:
+            db_table = r'cv_sitetype'
         ordering = ['term', 'name']
 
 
-class CvSpatialOffsetType(models.Model):
+class CvSpatialoffsettype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSpatialOffsetType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_SpatialOffsetType'
+        else:
+            db_table = r'cv_spatialoffsettype'
         ordering = ['term', 'name']
 
 
@@ -419,46 +514,54 @@ class CvSpeciation(models.Model):
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSpeciation'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_Speciation'
+        else:
+            db_table = r'cv_speciation'
         ordering = ['term', 'name']
 
 
-class CvSpecimenMedium(models.Model):
+class CvSpecimenmedium(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSpecimenMedium'
+        db_table = r'cv_medium'
         ordering = ['term', 'name']
 
 
-class CvSpecimenType(models.Model):
+class CvSpecimentype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvSpecimenType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_SpecimenType'
+        else:
+            db_table = r'cv_specimentype'
         ordering = ['term', 'name']
 
 
@@ -467,938 +570,989 @@ class CvStatus(models.Model):
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvStatus'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_Status'
+        else:
+            db_table = r'cv_status'
         ordering = ['term', 'name']
 
 
-class CvTaxonomicClassifierType(models.Model):
+class CvTaxonomicclassifiertype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvTaxonomicClassifierType'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_TaxonomicClassifierType'
+        else:
+            db_table = r'cv_taxonomicclassifiertype'
         ordering = ['term', 'name']
         verbose_name = "taxonomic classifier"
 
 
-class CvUnitsType(models.Model):
+class CvUnitstype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvUnitsType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_UnitsType'
+        else:
+            db_table = r'cv_unitstype'
         ordering = ['term', 'name']
 
 
-class CvVariableName(models.Model):
+class CvVariablename(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"{}".format(self.name)
 
     class Meta:
         managed = False
-        db_table = 'CvVariableName'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_VariableName'
+        else:
+            db_table = r'cv_variablename'
         ordering = ['term', 'name']
 
 
-class CvVariableType(models.Model):
+class CvVariabletype(models.Model):
     term = models.CharField(max_length=255)
     name = models.CharField(primary_key=True, max_length=255)
     definition = models.CharField(max_length=1000, blank=True)
     category = models.CharField(max_length=255, blank=True)
-    sourceVocabularyURI = models.CharField(max_length=255, blank=True)
+    sourcevocabularyuri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return u"%s" % self.name
 
     class Meta:
         managed = False
-        db_table = 'CvVariableType'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CV_VariableType'
+        else:
+            db_table = r'cv_variabletype'
         ordering = ['term', 'name']
 
 
 # ======================================================================================================================
-# Action annotation table
+# ODM2 Tables
 # ======================================================================================================================
-class ActionAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('Actions', db_column='actionId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey('Annotations', db_column='annotationId', on_delete=models.CASCADE)
+class Actionannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey('Actions', db_column='actionid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey('Annotations', db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ActionAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ActionAnnotations'
+        else:
+            db_table = r'actionannotations'
 
 
-# ======================================================================================================================
-# Action by table
-# ======================================================================================================================
-class ActionBy(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('Actions', verbose_name="action", db_column='actionId', on_delete=models.CASCADE)
-    affiliationId = models.ForeignKey('Affiliations', verbose_name="person by affiliation",
-                                      db_column='affiliationId', on_delete=models.CASCADE)
-    isActionLead = models.BooleanField(verbose_name="is lead person on action")
-    roleDescription = models.CharField(max_length=5000, verbose_name="person's role on this action",
-                                       blank=True)
+class Actionby(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey('Actions', verbose_name="action", db_column='actionid', on_delete=models.CASCADE)
+    affiliationid = models.ForeignKey('Affiliations', verbose_name="person by affiliation", db_column='affiliationid',
+                                      on_delete=models.CASCADE)
+    isactionlead = models.BooleanField(verbose_name="is lead person on action")
+    roledescription = models.CharField(max_length=5000, verbose_name="person's role on this action", blank=True)
 
     def __str__(self):
-        s = u"%s" % self.actionId
-        if self.affiliationId:
-            s += u"- %s" % self.affiliationId
-        if self.roleDescription:
-            s += u"- %s" % self.roleDescription
+        s = u"%s" % self.actionid
+        if self.affiliationid:
+            s += u"- %s" % self.affiliationid
+        if self.roledescription:
+            s += u"- %s" % self.roledescription
         return s
 
     class Meta:
         managed = False
-        db_table = 'ActionBy'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ActionBy'
+        else:
+            db_table = r'actionby'
         verbose_name = 'action by'
         verbose_name_plural = 'action by'
 
 
-# ======================================================================================================================
-# Action directives table
-# ======================================================================================================================
-class ActionDirectives(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('Actions', db_column='actionId', on_delete=models.CASCADE)
-    directiveId = models.ForeignKey('Directives', db_column='directiveId', on_delete=models.CASCADE)
+class Actiondirectives(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey('Actions', db_column='actionid', on_delete=models.CASCADE)
+    directiveid = models.ForeignKey('Directives', db_column='directiveid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ActionDirectives'
+        db_table = r'actiondirectives'
 
 
-# ======================================================================================================================
-# Action directives table
-# ======================================================================================================================
-class ActionExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey('Actions', db_column='actionId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey('ExtensionProperties', db_column='propertyId', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255)
+class Actionextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey('Actions', db_column='actionid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey('Extensionproperties', db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255)
 
     class Meta:
         managed = False
-        db_table = 'ActionExtensionPropertyValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ActionExtensionPropertyValues'
+        else:
+            db_table = r'actionextensionpropertyvalues'
+        _exportdb = settings.EXPORTDB
 
 
-# ======================================================================================================================
-# Actions table
-# ======================================================================================================================
 class Actions(models.Model):
-    actionId = models.AutoField(primary_key=True)
-    actionType = models.ForeignKey('CvActionType',
-                                   help_text='A vocabulary for describing the type of actions performed in making '
-                                             'observations. Depending on the action type, the action may or may not '
-                                             'produce an observation result. view action type details here '
-                                             'http://vocabulary.org/actiontype/',
-                                   db_column='actionTypeCV', on_delete=models.CASCADE)
-    method = models.ForeignKey('Methods', db_column='methodId', on_delete=models.CASCADE)
-    beginDateTime = models.DateTimeField(verbose_name='begin date time')
-    beginDateTimeUtcOffset = models.IntegerField(verbose_name='begin date time clock off set (from GMT)', default=4)
-    endDateTime = models.DateTimeField(verbose_name='end date time', blank=True, null=True)
-    endDateTimeUtcOffset = models.IntegerField(verbose_name='end date time clock off set (from GMT)', default=4)
-    actionDescription = models.CharField(verbose_name='action description', max_length=5000, blank=True)
-    actionFileLink = models.CharField(verbose_name='action file link', max_length=255, blank=True)
+    actionid = models.AutoField(primary_key=True)
+    action_type = models.ForeignKey('CvActiontype',
+                                    help_text='A vocabulary for describing the type of actions '
+                                              'performed in making observations. Depending'
+                                              ' on the action type, the action may or may not '
+                                              'produce an observation result. view action type '
+                                              'details here http://vocabulary.odm2.org/actiontype/',
+                                    db_column='actiontypecv', on_delete=models.CASCADE)
+    method = models.ForeignKey('Methods', db_column='methodid', on_delete=models.CASCADE)
+    begindatetime = models.DateTimeField(verbose_name='begin date time')
+    begindatetimeutcoffset = models.IntegerField(verbose_name='begin date time clock off set (from GMT)', default=-5)
+    enddatetime = models.DateTimeField(verbose_name='end date time', blank=True, null=True)
+    enddatetimeutcoffset = models.IntegerField(verbose_name='end date time clock off set (from GMT)', default=-5)
+    actiondescription = models.CharField(verbose_name='action description', max_length=5000, blank=True)
+    actionfilelink = models.CharField(verbose_name='action file link', max_length=255, blank=True)
 
     def __str__(self):
-        s = u"%s" % self.actionType
+        s = u"%s" % self.action_type
         if self.method:
             s += u" | %s" % self.method
         if self.method:
-            s += u" | %s" % (self.actionDescription[:25])
+            s += u" | %s" % (self.actiondescription[:25])
         return s
 
     class Meta:
         managed = False
-        db_table = 'Actions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Actions'
+        else:
+            db_table = r'actions'
+        _exportdb = settings.EXPORTDB
         verbose_name = 'action'
 
 
-# ======================================================================================================================
-# Affiliations table
-# ======================================================================================================================
 class Affiliations(models.Model):
-    affiliationId = models.AutoField(primary_key=True)
-    personId = models.ForeignKey('People', verbose_name='person', db_column='personId', on_delete=models.CASCADE)
-    organizationId = models.ForeignKey('Organizations', verbose_name='organization', db_column='organizationId',
+    affiliationid = models.AutoField(primary_key=True)
+    personid = models.ForeignKey('People', verbose_name='person', db_column='personid', on_delete=models.CASCADE)
+    organizationid = models.ForeignKey('Organizations', verbose_name='organization', db_column='organizationid',
                                        blank=True, null=True, on_delete=models.CASCADE)
-    isPrimaryOrganizationContact = models.NullBooleanField(verbose_name='primary organization contact? ')
-    affiliationStartDate = models.DateField(verbose_name="When affiliation began ")
-    affiliationEndDate = models.DateField(verbose_name="When affiliation ended", blank=True, null=True)
-    primaryPhone = models.CharField(verbose_name="primary phone", max_length=50, blank=True)
-    primaryEmail = models.CharField(verbose_name="primary email", max_length=255)
-    primaryAddress = models.CharField(verbose_name="primary address", max_length=255, blank=True)
-    personLink = models.CharField(max_length=255, blank=True)
+    isprimaryorganizationcontact = models.NullBooleanField(verbose_name='primary organization contact? ')
+    affiliationstartdate = models.DateField(verbose_name="When affiliation began ")
+    affiliationenddate = models.DateField(verbose_name="When affiliation ended", blank=True, null=True)
+    primaryphone = models.CharField(verbose_name="primary phone", max_length=50, blank=True)
+    primaryemail = models.CharField(verbose_name="primary email", max_length=255)
+    primaryaddress = models.CharField(verbose_name="primary address", max_length=255, blank=True)
+    personlink = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
-        s = u"%s" % self.personId
-        if self.organizationId:
-            s += u" | %s" % self.organizationId
+        s = u"%s" % self.personid
+        if self.organizationid:
+            s += u" | %s" % self.organizationid
         return s
 
     class Meta:
         managed = False
-        db_table = 'Affiliations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Affiliations'
+        else:
+            db_table = r'affiliations'
         verbose_name = 'affiliation (relate people and organizations)'
         verbose_name_plural = 'affiliation (relate people and organizations)'
-        ordering = ['-primaryEmail']
+        ordering = ['-primaryemail']
 
 
-# ======================================================================================================================
-# Annotations table
-# ======================================================================================================================
 class Annotations(models.Model):
-    annotationId = models.AutoField(primary_key=True)
-    annotationTypeCV = models.ForeignKey('CvAnnotationType', db_column='annotationTypeCV', on_delete=models.CASCADE)
-    annotationCode = models.CharField(max_length=50, blank=True)
-    annotationText = models.CharField(max_length=500)
-    annotationDateTime = models.DateTimeField(blank=True, null=True)
-    annotationUtcOffset = models.IntegerField(blank=True, null=True)
-    annotationLink = models.CharField(max_length=255, blank=True)
-    annotatorId = models.ForeignKey('People', db_column='annotatorId', blank=True, null=True,
-                                    on_delete=models.CASCADE)
-    citationId = models.ForeignKey('Citations', db_column='citationId', blank=True, null=True,
-                                   on_delete=models.CASCADE)
+    annotationid = models.AutoField(primary_key=True)
+    annotationtypecv = models.ForeignKey('CvAnnotationtype', db_column='annotationtypecv', on_delete=models.CASCADE)
+    annotationcode = models.CharField(max_length=50, blank=True)
+    annotationtext = models.CharField(max_length=500)
+    annotationdatetime = models.DateTimeField(blank=True, null=True)
+    annotationutcoffset = models.IntegerField(blank=True, null=True)
+    annotationlink = models.CharField(max_length=255, blank=True)
+    annotatorid = models.ForeignKey('People', db_column='annotatorid', blank=True, null=True, on_delete=models.CASCADE)
+    citationid = models.ForeignKey('Citations', db_column='citationid', blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u" %s" % self.annotationText
+        s = u" %s" % self.annotationtext
         return s
 
     class Meta:
         managed = False
-        db_table = 'Annotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Annotations'
+        else:
+            db_table = r'annotations'
 
 
-# ======================================================================================================================
-# Author lists table
-# ======================================================================================================================
-class AuthorLists(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    citationId = models.ForeignKey('Citations', verbose_name='citation', db_column='citationId',
+class Authorlists(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    citationid = models.ForeignKey('Citations', verbose_name='citation', db_column='citationid',
                                    on_delete=models.CASCADE)
-    personId = models.ForeignKey('People', verbose_name='person', db_column='personId', blank=True,
-                                 null=True, on_delete=models.CASCADE)
-    authorOrder = models.IntegerField(verbose_name='author order', blank=True, null=True)
+    personid = models.ForeignKey('People', verbose_name='person', db_column='personid', blank=True, null=True,
+                                 on_delete=models.CASCADE)
+    authororder = models.IntegerField(verbose_name='author order', blank=True, null=True)
 
     def __str__(self):
-        s = u"{0} - {1}".format(self.personId, self.authorOrder)
+        s = u"{0} - {1}".format(self.personid, self.authororder)
         return s
 
     class Meta:
         managed = False
-        db_table = 'AuthorLists'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'AuthorLists'
+        else:
+            db_table = r'authorlists'
         verbose_name = 'author list'
         verbose_name_plural = 'author list'
 
-    def csv_header(self):
-        s = 'Author ' + str(self.authorOrder) + ','
+    def csvheader(self):
+        s = 'Author ' + str(self.authororder) + ','
         return s
 
-    def csv_output(self):
-        s = '"' + str(self.personId.personLastName) + ', ' + str(
-            self.personId.personFirstName) + ', ' + str(
-            self.personId.personMiddleName) + '",'
+    def csvoutput(self):
+        s = '"' + str(self.personid.personlastname) + ', ' + str(
+            self.personid.personfirstname) + ', ' + str(
+            self.personid.personmiddlename) + '",'
         return s
 
-    def end_note_export(self):
-        s = 'AU  - ' + str(self.personId.personLastName) + "," + str(
-            self.personId.personFirstName) + ', ' + str(
-            self.personId.personMiddleName) + '\r\n'
+    def endnoteexport(self):
+        # if self.authororder ==1:
+        # s = 'FAU - '+ str(self.personid.personlastname)+","+ str(self.personid.personfirstname) +
+        # ', '+str(self.personid.personmiddlename) +'\n'
+        # else:
+        s = 'AU  - ' + str(self.personid.personlastname) + "," + str(
+            self.personid.personfirstname) + ', ' + str(
+            self.personid.personmiddlename) + '\r\n'
         return s
 
 
-# ======================================================================================================================
-# Calibration actions table
-# ======================================================================================================================
-class CalibrationActions(models.Model):
-    actionId = models.OneToOneField(Actions, db_column='actionId', primary_key=True, on_delete=models.CASCADE)
-    calibrationCheckValue = models.FloatField(blank=True, null=True)
-    instrumentOutputVariableId = models.ForeignKey('InstrumentOutputVariables', db_column='instrumentOutputVariableId',
+class Calibrationactions(models.Model):
+    actionid = models.OneToOneField(Actions, db_column='actionid', primary_key=True, on_delete=models.CASCADE)
+    calibrationcheckvalue = models.FloatField(blank=True, null=True)
+    instrumentoutputvariableid = models.ForeignKey('Instrumentoutputvariables', db_column='instrumentoutputvariableid',
                                                    on_delete=models.CASCADE)
-    calibrationEquation = models.CharField(max_length=255, blank=True)
+    calibrationequation = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'CalibrationActions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CalibrationActions'
+        else:
+            db_table = r'calibrationactions'
 
 
-# ======================================================================================================================
-# Calibration reference equipment table
-# ======================================================================================================================
-class CalibrationReferenceEquipment(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey(CalibrationActions, db_column='actionId', on_delete=models.CASCADE)
-    equipmentId = models.ForeignKey('Equipment', db_column='equipmentId', on_delete=models.CASCADE)
+class Calibrationreferenceequipment(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey(Calibrationactions, db_column='actionid', on_delete=models.CASCADE)
+    equipmentid = models.ForeignKey('Equipment', db_column='equipmentid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'CalibrationReferenceEquipment'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CalibrationReferenceEquipment'
+        else:
+            db_table = r'calibrationreferenceequipment'
 
 
-# ======================================================================================================================
-# Calibration standards table
-# ======================================================================================================================
-class CalibrationStandards(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey(CalibrationActions, db_column='actionId', on_delete=models.CASCADE)
-    referenceMaterialId = models.ForeignKey('ReferenceMaterials', db_column='referenceMaterialId',
+class Calibrationstandards(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey(Calibrationactions, db_column='actionid', on_delete=models.CASCADE)
+    referencematerialid = models.ForeignKey('Referencematerials', db_column='referencematerialid',
                                             on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'CalibrationStandards'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CalibrationStandards'
+        else:
+            db_table = r'calibrationstandards'
 
 
-# ======================================================================================================================
-# Categorical results table
-# ======================================================================================================================
-class CategoricalResults(models.Model):
-    resultId = models.OneToOneField('Results', db_column='resultId', primary_key=True, on_delete=models.CASCADE)
-    xLocation = models.FloatField(blank=True, null=True)
-    xLocationUnitsId = models.IntegerField(blank=True, null=True)
-    yLocation = models.FloatField(blank=True, null=True)
-    yLocationUnitsId = models.IntegerField(blank=True, null=True)
-    zLocation = models.FloatField(blank=True, null=True)
-    zLocationUnitsId = models.IntegerField(blank=True, null=True)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', db_column='spatialReferenceId', blank=True, null=True,
+class Categoricalresults(models.Model):
+    resultid = models.OneToOneField('Results', db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    xlocation = models.FloatField(blank=True, null=True)
+    xlocationunitsid = models.IntegerField(blank=True, null=True)
+    ylocation = models.FloatField(blank=True, null=True)
+    ylocationunitsid = models.IntegerField(blank=True, null=True)
+    zlocation = models.FloatField(blank=True, null=True)
+    zlocationunitsid = models.IntegerField(blank=True, null=True)
+    spatialreferenceid = models.ForeignKey('Spatialreferences', db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey('CvQualityCode', db_column='qualityCodeCV', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey('CvQualitycode', db_column='qualitycodecv', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'CategoricalResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CategoricalResults'
+        else:
+            db_table = r'categoricalresults'
 
 
-# ======================================================================================================================
-# Categorical results value annotations table
-# ======================================================================================================================
-class CategoricalResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('CategoricalResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
-
-    class Meta:
-        managed = False
-        db_table = 'CategoricalResultValueAnnotations'
-
-
-# ======================================================================================================================
-# Categorical results value table
-# ======================================================================================================================
-class CategoricalResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(CategoricalResults, db_column='resultId',
-                                 on_delete=models.CASCADE)
-    dataValue = models.CharField(max_length=255)
-    valueDatetime = models.DateTimeField()
-    valueDatetimeUtcOffset = models.IntegerField()
+class Categoricalresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Categoricalresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'CategoricalResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CategoricalResultValueAnnotations'
+        else:
+            db_table = r'categoricalresultvalueannotations'
 
 
-# ======================================================================================================================
-# Citation extension property values results value table
-# ======================================================================================================================
-class CitationExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    citationId = models.ForeignKey('Citations', db_column='citationId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey('ExtensionProperties', db_column='propertyId', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255, blank=True, null=True)
+class Categoricalresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Categoricalresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.CharField(max_length=255)
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+
+    class Meta:
+        managed = False
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CategoricalResultValues'
+        else:
+            db_table = r'categoricalresultvalues'
+
+
+class Citationextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    citationid = models.ForeignKey('Citations', db_column='citationid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey('Extensionproperties', db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
-        s = u"%s - %s - %s" % (self.citationId, self.propertyId, self.propertyValue)
+        s = u"%s - %s - %s" % (self.citationid, self.propertyid, self.propertyvalue)
         return s
 
     class Meta:
         managed = False
-        db_table = 'CitationExtensionPropertyValues'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CitationExtensionPropertyValues'
+        else:
+            db_table = r'citationextensionpropertyvalues'
         verbose_name = 'citation extension property'
         verbose_name_plural = 'citation extension properties'
 
-    def csv_header(self):
-        s = '"' + str(self.propertyId) + '",'
+    def csvheader(self):
+        s = '"' + str(self.propertyid) + '",'
         return s
 
-    def csv_output(self):
-        s = '"' + str(self.propertyValue) + '",'
+    def csvoutput(self):
+        s = '"' + str(self.propertyvalue) + '",'
         return s
+        # def endnoteheader(self):
+        # s ='"'+ str(self.propertyid)+'"\t'
+        # return s
 
-    def pub_type(self):
-        p_type = None
-        if str(self.propertyValue).__len__() > 0:
+    def pubType(self):
+        type = None
+        if str(self.propertyvalue).__len__() > 0:
             if str(
-                    self.propertyId) == 'Citation Category - Paper, Book, Talk, Poster, ' \
+                    self.propertyid) == 'Citation Category - Paper, Book, Talk, Poster, ' \
                                         'Dissertation, Thesis, Undergrad Thesis, Report':
-                if str(self.propertyValue) == 'Paper':
-                    p_type = "Paper"
-                if str(self.propertyValue) == 'Book':
-                    p_type = "Book"
-                if str(self.propertyValue) == 'Talk':
-                    p_type = "Conference"
-                if str(self.propertyValue) == 'Poster':
-                    p_type = "Poster"
-                if str(self.propertyValue) == 'Dissertation' or str(
-                        self.propertyValue) == 'Thesis' or str(self.propertyValue) == 'Undergrad Thesis':
-                    p_type = "Thesis"
-                if str(self.propertyValue) == 'Report':
-                    p_type = "Report"
-        return p_type
+                if str(self.propertyvalue) == 'Paper':
+                    type = "Paper"
+                if str(self.propertyvalue) == 'Book':
+                    type = "Book"
+                if str(self.propertyvalue) == 'Talk':
+                    type = "Conference"
+                if str(self.propertyvalue) == 'Poster':
+                    type = "Poster"
+                if str(self.propertyvalue) == 'Dissertation' or str(
+                        self.propertyvalue) == 'Thesis' or str(self.propertyvalue) == \
+                        'Undergrad Thesis':
+                    type = "Thesis"
+                if str(self.propertyvalue) == 'Report':
+                    type = "Report"
+        return type
 
-    def end_note_export(self):
+    def endnoteexport(self):
         s = ''
-        if str(self.propertyValue).__len__() > 0:
+        if str(self.propertyvalue).__len__() > 0:
             if str(
-                    self.propertyId) == 'Citation Category - Paper, Book, Talk, Poster, ' \
+                    self.propertyid) == 'Citation Category - Paper, Book, Talk, Poster, ' \
                                         'Dissertation, Thesis, Undergrad Thesis, Report':
                 s += 'TY  - '
-                if str(self.propertyValue) == 'Paper':
+                if str(self.propertyvalue) == 'Paper':
                     s += 'JOUR' + '\r\n'
-                if str(self.propertyValue) == 'Book':
+                if str(self.propertyvalue) == 'Book':
                     s += 'BOOK' + '\r\n'
-                if str(self.propertyValue) == 'Talk':
+                if str(self.propertyvalue) == 'Talk':
                     s += 'CONF' + '\r\n'
-                if str(self.propertyValue) == 'Poster':
+                if str(self.propertyvalue) == 'Poster':
                     s += 'ABST' + '\r\n'
-                if str(self.propertyValue) == 'Dissertation' or str(
-                        self.propertyValue) == 'Thesis' or str(self.propertyValue) == 'Undergrad Thesis':
+                if str(self.propertyvalue) == 'Dissertation' or str(
+                        self.propertyvalue) == 'Thesis' or str(self.propertyvalue) == \
+                        'Undergrad Thesis':
                     s += 'THES' + '\r\n'
-                if str(self.propertyValue) == 'Report':
+                if str(self.propertyvalue) == 'Report':
                     s += 'RPRT' + '\r\n'
-            s += 'N1  - ' + str(self.propertyId) + ': ' + str(self.propertyValue) + '\r\n'
+            s += 'N1  - ' + str(self.propertyid) + ': ' + str(self.propertyvalue) + '\r\n'
         else:
             s = ''
         return s
 
 
-# ======================================================================================================================
-# Citation external identifiers table
-# ======================================================================================================================
-class CitationExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    citationId = models.ForeignKey('Citations', db_column='citationId', on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey('ExternalIdentifierSystems', db_column='externalIdentifierSystemId',
+class Citationexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    citationid = models.ForeignKey('Citations', db_column='citationid', on_delete=models.CASCADE)
+    externalidentifiersystemid = models.ForeignKey('Externalidentifiersystems', db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    citationExternalIdentifier = models.CharField(max_length=255, db_column="citationExternalIdentifier")
-    citationExternalIdentifierURI = models.CharField(max_length=255, blank=True,
-                                                     db_column="citationExternalIdentifierURI")
+    citationexternalidentifier = models.CharField(max_length=255, db_column="citationexternalidentifier")
+    citationexternalidentifieruri = models.CharField(max_length=255, blank=True,
+                                                     db_column="citationexternalidentifieruri")
 
     def __str__(self):
-        s = u"{0} - {1}".format(self.externalIdentifierSystemId, self.citationExternalIdentifier)
+        s = u"{0} - {1}".format(self.externalidentifiersystemid, self.citationexternalidentifier)
         return s
 
     class Meta:
         managed = False
-        db_table = 'CitationExternalIdentifiers'
-        verbose_name = 'citationExternalIdentifier'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'CitationExternalIdentifiers'
+        else:
+            db_table = r'citationexternalidentifiers'
+        verbose_name = 'citationexternalidentifier'
 
 
-# ======================================================================================================================
-# Citations table
-# ======================================================================================================================
 class Citations(models.Model):
-    citationId = models.AutoField(primary_key=True)
+    citationid = models.AutoField(primary_key=True)
     title = models.CharField(max_length=255)
     publisher = models.CharField(max_length=255)
-    publicationYear = models.IntegerField(verbose_name='year')
-    citationLink = models.CharField(max_length=255, blank=True, verbose_name='Citation Link', )
+    publicationyear = models.IntegerField(verbose_name='year')
+    citationlink = models.CharField(max_length=255, blank=True, verbose_name='Citation Link')
 
     def __str__(self):
         s = u"%s" % self.title
         if self.publisher:
             s += u"- %s," % self.publisher
-        if self.publicationYear:
-            s += u", %s," % self.publicationYear
+        if self.publicationyear:
+            s += u", %s," % self.publicationyear
         return s
 
     class Meta:
         managed = False
-        db_table = 'Citations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Citations'
+        else:
+            db_table = r'citations'
         ordering = ['title']
         verbose_name = 'citation'
 
     @staticmethod
-    def csv_header():
-        s = 'citationId,title,publisher,year,citationLink,'
+    def csvheader():
+        s = 'citationid,title,publisher,year,citationlink,'
         return s
 
-    def csv_output(self):
-        s = str(self.citationId)
+    def csvoutput(self):
+        s = str(self.citationid)
         s += ',"{0}"'.format(self.title)
         s += ',"{0}"'.format(self.publisher)
-        s += ', {0}'.format(self.publicationYear)
-        s += ', {0},'.format(self.citationLink)
+        s += ', {0}'.format(self.publicationyear)
+        s += ', {0},'.format(self.citationlink)
         return s
 
     @staticmethod
-    def end_note_export_header():
-        s = 'TI\tPB\tPY\tcitationLink\t'
+    def endnoteexportheader():
+        s = 'TI\tPB\tPY\tcitationlink\t'
         return s
 
-    def end_note_export(self):
-        property_values = CitationExtensionPropertyValues.objects.filter(citationid=self.citationId)
-        pub_type = None
-        for propertyValue in property_values:
-            if propertyValue.pubType():
-                pub_type = propertyValue.pubType()
-        if not pub_type:  # "Conference""Poster""Thesis""Report"
-            pub_type = "Unknown"
+    def endnoteexport(self):
+        propertyvalues = Citationextensionpropertyvalues.objects.filter(citationid=self.citationid)
+        pubType = None
+        for propertyvalue in propertyvalues:
+            if propertyvalue.pubType():
+                pubType = propertyvalue.pubType()
+        if not pubType:  # "Conference""Poster""Thesis""Report"
+            pubType = "Unknown"
         s = 'TI  - {0}\r\n'.format(self.title)
-        if pub_type == "Paper":
+        if pubType == "Paper":
             s += 'JO  - {0}\r\n'.format(self.publisher)
         else:
             s += 'PB  - {0}\r\n'.format(self.publisher)
-        s += 'PY  - {0}\r\n'.format(self.publicationYear)
-        s += 'DI  - {0}\r\n'.format(self.citationLink)
+        s += 'PY  - {0}\r\n'.format(self.publicationyear)
+        s += 'DI  - {0}\r\n'.format(self.citationlink)
         return s
 
 
-# ======================================================================================================================
-# Data logger file columns table
-# ======================================================================================================================
-class DataLoggerFileColumns(models.Model):
-    dataLoggerFileColumnId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey('Results', verbose_name="result", db_column='resultId', blank=True, null=True,
+class Dataloggerfilecolumns(models.Model):
+    dataloggerfilecolumnid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey('Results', verbose_name="result", db_column='resultid', blank=True, null=True,
                                  on_delete=models.CASCADE)
-    dataLoggerFileId = models.ForeignKey('DataLoggerFiles', verbose_name="data logger file",
-                                         db_column='dataLoggerFileId', on_delete=models.CASCADE)
-    instrumentOutputVariableId = models.ForeignKey('InstrumentOutputVariables',
+    dataloggerfileid = models.ForeignKey('Dataloggerfiles', verbose_name="data logger file",
+                                         db_column='dataloggerfileid', on_delete=models.CASCADE)
+    instrumentoutputvariableid = models.ForeignKey('Instrumentoutputvariables',
                                                    verbose_name="instrument output variable",
-                                                   db_column='instrumentOutputVariableId', on_delete=models.CASCADE)
-    columnLabel = models.CharField(verbose_name="column label", max_length=50)
-    columnDescription = models.CharField(verbose_name="column description",
+                                                   db_column='instrumentoutputvariableid', on_delete=models.CASCADE)
+    columnlabel = models.CharField(verbose_name="column label", max_length=50)
+    columndescription = models.CharField(verbose_name="column description",
                                          help_text="To disble ingestion of a column type skip, " +
                                                    "or to specify a column as the date time enter datetime" +
                                                    " if the datetime is an excel format numeric datetime" +
                                                    " enter exceldatetime",
-                                         max_length=5000,
-                                         blank=True)
-    measurementEquation = models.CharField(verbose_name="measurement equation", max_length=255,
-                                           blank=True)
-    scanInterval = models.FloatField(verbose_name="scan interval (time)", blank=True, null=True)
-    scanIntervalUnitsId = models.ForeignKey('Units', verbose_name="scan interval units",
-                                            related_name='relatedScanIntervalUnitsId',
-                                            db_column='scanIntervalUnitsId',
-                                            blank=True, null=True,
+                                         max_length=5000, blank=True)
+    measurementequation = models.CharField(verbose_name="measurement equation", max_length=255, blank=True)
+    scaninterval = models.FloatField(verbose_name="scan interval (time)", blank=True, null=True)
+    scanintervalunitsid = models.ForeignKey('Units', verbose_name="scan interval units",
+                                            related_name='relatedScanIntervalUnitsid',
+                                            db_column='scanintervalunitsid', blank=True, null=True,
                                             on_delete=models.CASCADE)
-    recordingInterval = models.FloatField(verbose_name="recording interval", blank=True, null=True)
-    recordingIntervalUnitsId = models.ForeignKey('Units', verbose_name="recording interval units",
-                                                 related_name='relatedRecordingIntervalUnitsId',
-                                                 db_column='recordingIntervalUnitsId', blank=True,
-                                                 null=True,
+    recordinginterval = models.FloatField(verbose_name="recording interval", blank=True, null=True)
+    recordingintervalunitsid = models.ForeignKey('Units', verbose_name="recording interval units",
+                                                 related_name='relatedRecordingintervalunitsid',
+                                                 db_column='recordingintervalunitsid', blank=True, null=True,
                                                  on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic,
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic,
                                                verbose_name="aggregation statistic",
-                                               db_column='aggregationStatisticCV', blank=True,
-                                               null=True,
+                                               db_column='aggregationstatisticcv', blank=True, null=True,
                                                on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"Label: %s," % self.columnLabel
+        # s = u"%s" % (self.dataloggerfileid)
+        s = u"Label: %s," % self.columnlabel
         # s += u" Description: %s," % (self.columndescription)
-        s += u" Result: %s" % self.resultId
+        s += u" Result: %s" % self.resultid
         return s
 
     class Meta:
         managed = False
-        db_table = 'DataLoggerFileColumns'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DataloggerFileColumns'
+        else:
+            db_table = r'dataloggerfilecolumns'
+        _exportdb = settings.EXPORTDB
         verbose_name = 'data logger file column'
 
 
-# ======================================================================================================================
-# Data logger files table
-# ======================================================================================================================
-class DataLoggerFiles(models.Model):
-    dataLoggerFileId = models.AutoField(primary_key=True)
-    programId = models.ForeignKey('DataLoggerProgramFiles', db_column='programId', on_delete=models.CASCADE)
-    dataLoggerFileName = models.CharField(max_length=255, verbose_name="Data logger file name")
-    dataLoggerFileDescription = models.CharField(max_length=5000, blank=True,
+class Dataloggerfiles(models.Model):
+    dataloggerfileid = models.AutoField(primary_key=True)
+    programid = models.ForeignKey('Dataloggerprogramfiles', db_column='programid', on_delete=models.CASCADE)
+    dataloggerfilename = models.CharField(max_length=255, verbose_name="Data logger file name")
+    dataloggerfiledescription = models.CharField(max_length=5000, blank=True,
                                                  verbose_name="Data logger file description")
-    dataLoggerFileLink = models.FileField(upload_to='dataLoggerFiles', verbose_name="Data logger file")  # upload_to='.'
+    dataloggerfilelink = models.FileField(upload_to='dataloggerfiles', verbose_name="Data logger file")  # upload_to='.'
 
-    def data_logger_file_link_name(self):
-        return self.dataLoggerFileLink.name
+    def dataloggerfilelinkname(self):
+        return self.dataloggerfilelink.name
 
     def __str__(self):
-        s = u"%s" % self.dataLoggerFileName
+        s = u"%s" % self.dataloggerfilename
         return s
 
     class Meta:
         managed = False
-        db_table = 'DataLoggerFiles'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DataLoggerFiles'
+        else:
+            db_table = r'dataloggerfiles'
+        _exportdb = settings.EXPORTDB
         verbose_name = 'data logger file'
 
 
-# ======================================================================================================================
-# Process data logger file table
-# ======================================================================================================================
-class ProcessDataLoggerFile(models.Model):
-    processDataLoggerFileId = models.AutoField(primary_key=True)
-    dataLoggerFileId = models.ForeignKey(DataLoggerFiles,
+class ProcessDataloggerfile(models.Model):
+    processdataloggerfileid = models.AutoField(primary_key=True)
+    dataloggerfileid = models.ForeignKey('dataloggerfiles',
                                          help_text="CAUTION data logger file columns must be setup" +
                                                    ", the date and time stamp is expected to " +
-                                                   "be the first column, " + " column names must match " +
-                                                   "the column name in associated " + "dataLoggerFileColumns.",
-                                         verbose_name='data logger file', db_column='dataLoggerFileId',
-                                         on_delete=models.CASCADE)
+                                                   "be the first column, " +
+                                                   " column names must match " +
+                                                   "the column name in associated " +
+                                                   "dataloggerfilecolumns.",
+                                         verbose_name='data logger file',
+                                         db_column='dataloggerfileid', on_delete=models.CASCADE)
     processingCode = models.CharField(max_length=255, verbose_name='processing code',
                                       help_text="to setup an FTP file download set the processing" +
                                       "code as 'x hours between download' where x is how many hours to " +
                                       "wait between downloading copies of the file from the FTP site. " +
-                                      "A data logger file setup for FTP download must have only 1 " +
+                                      "A datalogger file setup for FTP download must have only 1 " +
                                       "process data logger file record.", default="0")
-    dataBeginsOn = models.IntegerField(verbose_name="Data begins on this row number", default=2)
-    columnHeadersOn = models.IntegerField(
+    databeginson = models.IntegerField(verbose_name="Data begins on this row number", default=2)
+    columnheaderson = models.IntegerField(
         verbose_name="Column headers matching column labels from data logger columns on row")
-    dateProcessed = models.DateTimeField(auto_now=True)
+    date_processed = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        s = u"%s" % self.dataLoggerFileId
-        s += u"- Processed on %s" % self.dateProcessed
+        s = u"%s" % self.dataloggerfileid
+        s += u"- Processed on %s" % self.date_processed
         return s
 
     class Meta:
         managed = False
-        db_table = 'ODM2EXTRA.ProcessDataLoggerFile'
+        db_table = r'odm2extra"."processdataloggerfile'
         verbose_name = 'process data logger file'
 
     def save(self, *args, **kwargs):
-        link_name = str(self.dataLoggerFileId.dataLoggerFileLink.name)
-        file_id = self.dataLoggerFileId.dataLoggerFileId
-        ftp_file = self.dataLoggerFileId.dataLoggerFileDescription
-        ftp_parse = urlparse(ftp_file)
-        if len(ftp_parse.netloc) > 0:
-            ftp_frequency_hours = re.findall(r'^\D*(\d+)', self.processingCode)[0]
-            management.call_command('update_preprocess_process_datalogger_file', link_name, str(file_id),
-                                    str(self.dataBeginsOn), str(self.columnHeadersOn),
-                                    str(ftp_frequency_hours), False)
+        linkname = str(self.dataloggerfileid.dataloggerfilelinkname())
+        fileid = self.dataloggerfileid.dataloggerfileid
+        ftpfile = self.dataloggerfileid.dataloggerfiledescription
+        ftpparse = urlparse(ftpfile)
+        if len(ftpparse.netloc) > 0:
+            ftpfrequencyhours = re.findall(r'^\D*(\d+)', self.processingCode)[0]
+            management.call_command('update_preprocess_process_datalogger_file', linkname, str(fileid)
+                                    , str(self.databeginson), str(self.columnheaderson),
+                                    str(ftpfrequencyhours), False)
         else:
-            management.call_command('ProcessDataLoggerFile', link_name, str(file_id),
-                                    str(self.dataBeginsOn), str(self.columnHeadersOn),
+            management.call_command('ProcessDataLoggerFile', linkname ,str(fileid)
+                                    , str(self.databeginson), str(self.columnheaderson),
                                     False, False, False)
-        super(ProcessDataLoggerFile, self).save(*args, **kwargs)
+        super(ProcessDataloggerfile, self).save(*args, **kwargs)
 
 
-# ======================================================================================================================
-# Data logger program files table
-# ======================================================================================================================
-class DataLoggerProgramFiles(models.Model):
-    programId = models.AutoField(primary_key=True)
-    affiliationId = models.ForeignKey(Affiliations, db_column='affiliationId', on_delete=models.CASCADE)
-    programName = models.CharField(max_length=255)
-    programDescription = models.CharField(max_length=5000, blank=True)
-    programVersion = models.CharField(max_length=50, blank=True)
-    programFileLink = models.FileField(upload_to='dataLoggerProgramFiles')
-
-    # + '/' + programname.__str__() settings.settings.MEDIA_ROOT upload_to='/upfiles/'
+class Dataloggerprogramfiles(models.Model):
+    programid = models.AutoField(primary_key=True)
+    affiliationid = models.ForeignKey(Affiliations, db_column='affiliationid',
+                                      on_delete=models.CASCADE)
+    programname = models.CharField(max_length=255)
+    programdescription = models.CharField(max_length=5000, blank=True)
+    programversion = models.CharField(max_length=50, blank=True)
+    programfilelink = models.FileField(upload_to='dataloggerprogramfiles')
 
     def __str__(self):
-        s = u"%s" % self.programName
-        s += u"- Version %s" % self.programVersion
+        s = u"%s" % self.programname
+        s += u"- Version %s" % self.programversion
         return s
 
     class Meta:
         managed = False
-        db_table = 'DataLoggerProgramFiles'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DataloggerProgramFiles'
+        else:
+            db_table = r'dataloggerprogramfiles'
         verbose_name = 'data logger program file'
 
 
-# ======================================================================================================================
-# Data quality table
-# ======================================================================================================================
-class DataQuality(models.Model):
-    dataQualityId = models.AutoField(primary_key=True)
-    dataQualityTypeCV = models.ForeignKey(CvDataQualityType, db_column='dataQualityTypeCV',
+class Dataquality(models.Model):
+    dataqualityid = models.AutoField(primary_key=True)
+    dataqualitytypecv = models.ForeignKey(CvDataqualitytype, db_column='dataqualitytypecv',
                                           verbose_name="data quality type", on_delete=models.CASCADE)
-    dataQualityCode = models.CharField(max_length=255, verbose_name="data quality code",
+    dataqualitycode = models.CharField(max_length=255, verbose_name="data quality code",
                                        help_text="for an alarm test include the word alarm." +
                                                  " for a hard bounds check include the word bound (if a value" +
                                                  " falls below a lower limit, or exceeds a lower limit the " +
                                                  "value will be set to NaN (not a number). ")
-    dataQualityValue = models.FloatField(blank=True, null=True, verbose_name="data quality value")
-    dataQualityValueUnitsId = models.ForeignKey('Units', related_name='+',
-                                                db_column='dataQualityValueUnitsId',
+    dataqualityvalue = models.FloatField(blank=True, null=True, verbose_name="data quality value")
+    dataqualityvalueunitsid = models.ForeignKey('Units', related_name='+', db_column='dataqualityvalueunitsid',
                                                 verbose_name="data quality value units", blank=True, null=True,
                                                 on_delete=models.CASCADE)
-    dataQualityDescription = models.CharField(max_length=5000, blank=True, verbose_name="data quality description")
-    dataQualityLink = models.CharField(max_length=255, blank=True, verbose_name="data quality link")
+    dataqualitydescription = models.CharField(max_length=5000, blank=True, verbose_name="data quality description")
+    dataqualitylink = models.CharField(max_length=255, blank=True, verbose_name="data quality link")
 
     def __str__(self):
         return u"%s - %s - %s" % (
-            self.dataQualityCode, self.dataQualityValue, self.dataQualityValueUnitsId)
+            self.dataqualitycode, self.dataqualityvalue, self.dataqualityvalueunitsid)
 
     class Meta:
         managed = False
-        db_table = 'DataQuality'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DataQuality'
+        else:
+            db_table = r'dataquality'
         verbose_name = 'data quality'
         verbose_name_plural = 'data quality'
 
 
-# ======================================================================================================================
-# Dataset citations table
-# ======================================================================================================================
-class DatasetCitations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    datasetId = models.ForeignKey('Datasets', verbose_name='dataset', db_column='datasetId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, verbose_name='relationship type',
-                                           db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    citationId = models.ForeignKey(Citations, db_column='citationId', verbose_name='citation', on_delete=models.CASCADE)
+class Datasetcitations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    datasetid = models.ForeignKey('Datasets', verbose_name='dataset', db_column='datasetid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, verbose_name='relationship type',
+                                           db_column='relationshiptypecv', on_delete=models.CASCADE)
+    citationid = models.ForeignKey(Citations, db_column='citationid', verbose_name='citation', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'DatasetCitations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DatasetCitations'
+        else:
+            db_table = r'datasetcitations'
         verbose_name = 'dataset citation'
 
 
-# ======================================================================================================================
-# Datasets table
-# ======================================================================================================================
 class Datasets(models.Model):
-    datasetId = models.AutoField(primary_key=True)
-    datasetUUID = models.UUIDField(default=uuid.uuid4, editable=False)
-    datasetTypeCV = models.ForeignKey(CvDatasetType, verbose_name="dataset type",
-                                      db_column='datasetTypeCV', on_delete=models.CASCADE)
-    datasetCode = models.CharField(verbose_name="dataset code", max_length=50)
-    datasetTitle = models.CharField(verbose_name="dataset title", max_length=255)
-    datasetAbstract = models.CharField(verbose_name="dataset abstract", max_length=5000)
+    datasetid = models.AutoField(primary_key=True)
+    datasetuuid = UUIDField(default=uuid.uuid4, editable=False)
+    datasettypecv = models.ForeignKey(CvDatasettypecv, verbose_name="dataset type", db_column='datasettypecv',
+                                      on_delete=models.CASCADE)
+    datasetcode = models.CharField(verbose_name="dataset code", max_length=50)
+    datasettitle = models.CharField(verbose_name="dataset title", max_length=255)
+    datasetabstract = models.CharField(verbose_name="dataset abstract", max_length=5000)
 
     def __str__(self):
-        s = u"%s" % self.datasetCode
-        if self.datasetTitle:
-            s += u"- %s" % self.datasetTitle
+        s = u"%s" % self.datasetcode
+        if self.datasettitle:
+            s += u"- %s" % self.datasettitle
         return s
 
     class Meta:
         managed = False
-        db_table = 'Datasets'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Datasets'
+        else:
+            db_table = r'datasets'
         verbose_name = 'dataset'
 
 
-# ======================================================================================================================
-# Dataset results table
-# ======================================================================================================================
-class DatasetsResults(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    datasetId = models.ForeignKey(Datasets, verbose_name="dataset", db_column='datasetId', on_delete=models.CASCADE)
-    resultId = models.ForeignKey('Results', verbose_name="add the dataset to the result", db_column='resultId',
+class Datasetsresults(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    datasetid = models.ForeignKey(Datasets, verbose_name="dataset", db_column='datasetid', on_delete=models.CASCADE)
+    resultid = models.ForeignKey('Results', verbose_name="add the dataset to the result", db_column='resultid',
                                  on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.datasetId
-        if self.resultId:
-            s += u"- %s" % self.resultId
+        s = u"%s" % self.datasetid
+        if self.resultid:
+            s += u"- %s" % self.resultid
         return s
 
     class Meta:
         managed = False
-        db_table = 'DatasetsResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DatasetsResults'
+        else:
+            db_table = r'datasetsresults'
         verbose_name = 'dataset result'
 
 
-# ======================================================================================================================
-# Derivation equations table
-# ======================================================================================================================
-class DerivationEquations(models.Model):
-    derivationEquationId = models.AutoField(primary_key=True)
-    derivationEquation = models.CharField(max_length=255, verbose_name='derivation equation')
+class Derivationequations(models.Model):
+    derivationequationid = models.AutoField(primary_key=True)
+    derivationequation = models.CharField(max_length=255, verbose_name='derivation equation')
 
     def __str__(self):
-        s = u"%s" % self.derivationEquation
+        s = u"%s" % self.derivationequation
         return s
 
     class Meta:
         managed = False
-        db_table = r'DerivationEquations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'DerivationEquations'
+        else:
+            db_table = r'derivationequations'
         verbose_name = 'derivation equation'
 
 
-# ======================================================================================================================
-# Directives table
-# ======================================================================================================================
 class Directives(models.Model):
-    directiveId = models.AutoField(primary_key=True)
-    directiveTypeCV = models.ForeignKey(CvDirectiveType, db_column='directiveTypeCV',
-                                        on_delete=models.CASCADE)
-    directiveDescription = models.CharField(max_length=500)
+    directiveid = models.AutoField(primary_key=True)
+    directivetypecv = models.ForeignKey(CvDirectivetype, db_column='directivetypecv', on_delete=models.CASCADE)
+    directivedescription = models.CharField(max_length=500)
 
     class Meta:
         managed = False
-        db_table = 'Directives'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Directives'
+        else:
+            db_table = r'directives'
 
 
-# ======================================================================================================================
-# Equipment table
-# ======================================================================================================================
 class Equipment(models.Model):
-    equipmentId = models.AutoField(primary_key=True)
-    equipmentCode = models.CharField(max_length=50)
-    equipmentName = models.CharField(max_length=255)
-    equipmentTypeCV = models.ForeignKey(CvEquipmentType, db_column='equipmentTypeCV', on_delete=models.CASCADE)
-    equipmentModelId = models.ForeignKey('EquipmentModels', db_column='equipmentModelId', on_delete=models.CASCADE)
-    equipmentSerialNumber = models.CharField(max_length=50)
-    equipmentOwnerId = models.ForeignKey('People', db_column='equipmentOwnerId', on_delete=models.CASCADE)
-    equipmentVendorId = models.ForeignKey('Organizations', db_column='equipmentVendorId', on_delete=models.CASCADE)
-    equipmentPurchaseDate = models.DateTimeField()
-    equipmentPurchaseOrderNumber = models.CharField(max_length=50, blank=True)
-    equipmentDescription = models.CharField(max_length=5000, blank=True)
-    equipmentDocumentationLink = models.CharField(max_length=255, blank=True)
+    equipmentid = models.AutoField(primary_key=True)
+    equipmentcode = models.CharField(max_length=50)
+    equipmentname = models.CharField(max_length=255)
+    equipmenttypecv = models.ForeignKey(CvEquipmenttype, db_column='equipmenttypecv', on_delete=models.CASCADE)
+    equipmentmodelid = models.ForeignKey('Equipmentmodels', db_column='equipmentmodelid', on_delete=models.CASCADE)
+    equipmentserialnumber = models.CharField(max_length=50)
+    equipmentownerid = models.ForeignKey('People', db_column='equipmentownerid', on_delete=models.CASCADE)
+    equipmentvendorid = models.ForeignKey('Organizations', db_column='equipmentvendorid', on_delete=models.CASCADE)
+    equipmentpurchasedate = models.DateTimeField()
+    equipmentpurchaseordernumber = models.CharField(max_length=50, blank=True)
+    equipmentdescription = models.CharField(max_length=5000, blank=True)
+    equipmentdocumentationlink = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'Equipment'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Equipment'
+        else:
+            db_table = r'equipment'
 
 
-# ======================================================================================================================
-# Equipment annotations table
-# ======================================================================================================================
-class EquipmentAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    equipmentId = models.ForeignKey(Equipment, db_column='equipmentId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId',
-                                     on_delete=models.CASCADE)
+class Equipmentannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    equipmentid = models.ForeignKey(Equipment, db_column='equipmentid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'EquipmentAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'EquipmentAnnotations'
+        else:
+            db_table = r'equipmentannotations'
 
 
-# ======================================================================================================================
-# Equipment models table
-# ======================================================================================================================
-class EquipmentModels(models.Model):
-    equipmentModelId = models.AutoField(primary_key=True)
-    modelManufacturerId = models.ForeignKey('Organizations', verbose_name="model manufacturer",
-                                            db_column='modelManufacturerId', on_delete=models.CASCADE)
-    modelPartNumber = models.CharField(max_length=50, blank=True, verbose_name="model part number")
-    modelName = models.CharField(max_length=255, verbose_name="model name")
-    modelDescription = models.CharField(max_length=5000, blank=True, null=True, verbose_name="model description")
-    isInstrument = models.BooleanField(verbose_name="Is this an instrument?")
-    modelSpecificationsFileLink = models.CharField(max_length=255, verbose_name="link to manual for equipment",
+class Equipmentmodels(models.Model):
+    equipmentmodelid = models.AutoField(primary_key=True)
+    modelmanufacturerid = models.ForeignKey('Organizations', verbose_name="model manufacturer",
+                                            db_column='modelmanufacturerid', on_delete=models.CASCADE)
+    modelpartnumber = models.CharField(max_length=50, blank=True, verbose_name="model part number")
+    modelname = models.CharField(max_length=255, verbose_name="model name")
+    modeldescription = models.CharField(max_length=5000, blank=True, null=True, verbose_name="model description")
+    isinstrument = models.BooleanField(verbose_name="Is this an instrument?")
+    modelspecificationsfilelink = models.CharField(max_length=255, verbose_name="link to manual for equipment",
                                                    blank=True)
-    modelLink = models.CharField(max_length=255, verbose_name="link to website for model", blank=True)
+    modellink = models.CharField(max_length=255, verbose_name="link to website for model", blank=True)
 
     def __str__(self):
-        s = u"%s" % self.modelName
-        if self.modelPartNumber:
-            s += u"- %s" % self.modelPartNumber
+        s = u"%s" % self.modelname
+        if self.modelpartnumber:
+            s += u"- %s" % self.modelpartnumber
         return s
 
     class Meta:
         managed = False
-        db_table = 'EquipmentModels'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'EquipmentModels'
+        else:
+            db_table = r'equipmentmodels'
         verbose_name = "equipment model"
 
 
-# ======================================================================================================================
-# Equipment used table
-# ======================================================================================================================
-class EquipmentUsed(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey(Actions, db_column='actionId', on_delete=models.CASCADE)
-    equipmentId = models.ForeignKey(Equipment, db_column='equipmentId', on_delete=models.CASCADE)
+class Equipmentused(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey(Actions, db_column='actionid', on_delete=models.CASCADE)
+    equipmentid = models.ForeignKey(Equipment, db_column='equipmentid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'EquipmentUsed'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'EquipmentUsed'
+        else:
+            db_table = r'equipmentused'
 
 
-# ======================================================================================================================
-# Extension properties table
-# ======================================================================================================================
-class ExtensionProperties(models.Model):
-    propertyId = models.AutoField(primary_key=True)
-    propertyName = models.CharField(max_length=255, verbose_name="property name")
-    propertyDescription = models.CharField(max_length=5000, blank=True, verbose_name="property description")
-    propertyDataTypeCV = models.ForeignKey(CvPropertyDataType, db_column='propertyDataTypeCV',
+class Extensionproperties(models.Model):
+    propertyid = models.AutoField(primary_key=True)
+    propertyname = models.CharField(max_length=255, verbose_name="property name")
+    propertydescription = models.CharField(max_length=5000, blank=True, verbose_name="property description")
+    propertydatatypecv = models.ForeignKey(CvPropertydatatype, db_column='propertydatatypecv',
                                            verbose_name="property data type", on_delete=models.CASCADE)
-    propertyUnitsId = models.ForeignKey('Units', db_column='propertyUnitsId', blank=True, null=True,
+    propertyunitsid = models.ForeignKey('Units', db_column='propertyunitsid', blank=True, null=True,
                                         verbose_name="units for property", on_delete=models.CASCADE)
 
     def __str__(self):
-        return u"%s - %s" % (self.propertyName, self.propertyDescription)
+        return u"%s - %s" % (self.propertyname, self.propertydescription)
 
     class Meta:
         managed = False
-        db_table = 'ExtensionProperties'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ExtensionProperties'
+        else:
+            db_table = r'extensionproperties'
         verbose_name = 'extension property'
         verbose_name_plural = 'extension properties'
 
 
-# ======================================================================================================================
-# External identifier systems table
-# ======================================================================================================================
-class ExternalIdentifierSystems(models.Model):
-    externalIdentifierSystemId = models.AutoField(primary_key=True)
-    externalIdentifierSystemName = models.CharField(max_length=255)
-    identifierSystemOrganizationId = models.ForeignKey('Organizations', db_column='identifierSystemOrganizationId',
+class Externalidentifiersystems(models.Model):
+    externalidentifiersystemid = models.AutoField(primary_key=True)
+    externalidentifiersystemname = models.CharField(max_length=255)
+    identifiersystemorganizationid = models.ForeignKey('Organizations', db_column='identifiersystemorganizationid',
                                                        on_delete=models.CASCADE)
-    externalIdentifierSystemDescription = models.CharField(max_length=5000, blank=True)
-    externalIdentifierSystemURL = models.CharField(max_length=255, blank=True)
+    externalidentifiersystemdescription = models.CharField(max_length=5000, blank=True)
+    externalidentifiersystemurl = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
-        return u"%s" % self.externalIdentifierSystemName
+        return u"%s" % self.externalidentifiersystemname
 
     class Meta:
         managed = False
-        db_table = 'ExternalIdentifierSystems'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ExternalIdentifierSystems'
+        else:
+            db_table = r'externalidentifiersystems'
 
 
-# ======================================================================================================================
-# Feature actions table
-# ======================================================================================================================
-class FeatureActions(models.Model):
-    featureActionId = models.AutoField(primary_key=True, verbose_name="sampling feature action")
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', on_delete=models.CASCADE)
-    action = models.ForeignKey(Actions, db_column='actionId', on_delete=models.CASCADE)
+class Featureactions(models.Model):
+    featureactionid = models.AutoField(primary_key=True, verbose_name="sampling feature action")
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', db_column='samplingfeatureid', on_delete=models.CASCADE)
+    action = models.ForeignKey(Actions, db_column='actionid', on_delete=models.CASCADE)
 
     def __str__(self):
-        return u"%s- %s - %s" % (self.featureActionId, self.samplingFeatureId, self.action)
+        return u"%s- %s - %s" % (self.featureactionid, self.samplingfeatureid, self.action)
 
     class Meta:
         managed = False
-        db_table = 'FeatureActions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'FeatureActions'
+        else:
+            db_table = r'featureactions'
         verbose_name = 'action at sampling feature'
         verbose_name_plural = 'action at sampling feature'
 
 
-# ======================================================================================================================
-# Feature actions names table
-# ======================================================================================================================
-# this class just stores the unicode representation of a featureAction for faster lookup
-class FeatureActionsNames(models.Model):
-    featureActionNamesId = models.AutoField(primary_key=True)
-    featureActionId = models.ForeignKey('FeatureActions', db_column='featureactionId',
-                                        on_delete=models.CASCADE)
+# this class just stores the unicode representation of a featureaction for faster lookup
+class FeatureactionsNames(models.Model):
+    featureactionNamesid = models.AutoField(primary_key=True)
+    featureactionid = models.ForeignKey('Featureactions', db_column='featureactionid', on_delete=models.CASCADE)
     name = models.CharField(max_length=500)
 
     def __str__(self):
@@ -1406,578 +1560,589 @@ class FeatureActionsNames(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'ODM2EXTRA.FeatureActionsNames'
+        db_table = r'odm2extra"."featureactionsNames'
         verbose_name = 'feature action names'
 
 
-# ======================================================================================================================
-# Instrument output variables table
-# ======================================================================================================================
-class InstrumentOutputVariables(models.Model):
-    instrumentOutputVariableId = models.AutoField(primary_key=True)
-    modelId = models.ForeignKey(EquipmentModels, verbose_name="equipment model", db_column='modelId',
+class Instrumentoutputvariables(models.Model):
+    instrumentoutputvariableid = models.AutoField(primary_key=True)
+    modelid = models.ForeignKey(Equipmentmodels, verbose_name="equipment model", db_column='modelid',
                                 on_delete=models.CASCADE)
-    variableId = models.ForeignKey('Variables', verbose_name="variable", db_column='variableId',
+    variableid = models.ForeignKey('Variables', verbose_name="variable", db_column='variableid',
                                    on_delete=models.CASCADE)
-    instrumentMethodId = models.ForeignKey('Methods', verbose_name="instrument method", db_column='instrumentMethodId',
+    instrumentmethodid = models.ForeignKey('Methods', verbose_name="instrument method", db_column='instrumentmethodid',
                                            on_delete=models.CASCADE)
-    instrumentResolution = models.CharField(max_length=255, verbose_name="instrument resolution", blank=True)
-    instrumentAccuracy = models.CharField(max_length=255, verbose_name="instrument accuracy", blank=True)
-    instrumentRawOutputUnitsId = models.ForeignKey('Units', related_name='+', verbose_name="instrument raw output unit",
-                                                   db_column='instrumentRawOutputUnitsId', on_delete=models.CASCADE)
+    instrumentresolution = models.CharField(max_length=255, verbose_name="instrument resolution", blank=True)
+    instrumentaccuracy = models.CharField(max_length=255, verbose_name="instrument accuracy", blank=True)
+    instrumentrawoutputunitsid = models.ForeignKey('Units', related_name='+', verbose_name="instrument raw output unit",
+                                                   db_column='instrumentrawoutputunitsid', on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.modelId
-        s += u"- %s" % self.variableId
+        s = u"%s " % self.modelid
+        s += u"- %s" % self.variableid
         return s
 
     class Meta:
         managed = False
-        db_table = 'InstrumentOutputVariables'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'InstrumentOutputVariables'
+        else:
+            db_table = r'instrumentoutputvariables'
         verbose_name = "instrument output variable"
 
 
-# ======================================================================================================================
-# Maintenance actions table
-# ======================================================================================================================
-class MaintenanceActions(models.Model):
-    actionId = models.OneToOneField(Actions, db_column='actionId', primary_key=True, on_delete=models.CASCADE)
-    isFactoryService = models.BooleanField()
-    maintenanceCode = models.CharField(max_length=50, blank=True)
-    maintenanceReason = models.CharField(max_length=500, blank=True)
+class Maintenanceactions(models.Model):
+    actionid = models.OneToOneField(Actions, db_column='actionid', primary_key=True, on_delete=models.CASCADE)
+    isfactoryservice = models.BooleanField()
+    maintenancecode = models.CharField(max_length=50, blank=True)
+    maintenancereason = models.CharField(max_length=500, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'MaintenanceActions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MaintenanceActions'
+        else:
+            db_table = r'maintenanceactions'
 
 
-# ======================================================================================================================
-# Measurement results table
-# ======================================================================================================================
-class MeasurementResults(models.Model):
-    resultId = models.OneToOneField('Results', verbose_name="Result Series", db_column='resultId', primary_key=True,
+class Measurementresults(models.Model):
+    resultid = models.OneToOneField('Results', verbose_name="Result Series", db_column='resultid', primary_key=True,
                                     on_delete=models.CASCADE)
-    xLocation = models.FloatField(verbose_name="x location", blank=True, null=True)
-    xLocationUnitsId = models.ForeignKey('Units', verbose_name="x location units", related_name='relatedXLocationUnits',
-                                         db_column='xLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
-    yLocation = models.FloatField(blank=True, verbose_name="y location", null=True)
-    yLocationUnitsId = models.ForeignKey('Units', verbose_name="y location units", related_name='relatedYLocationUnits',
-                                         db_column='yLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
-    zLocation = models.FloatField(blank=True, verbose_name="z location", null=True)
-    zLocationUnitsId = models.ForeignKey('Units', verbose_name="z location units", related_name='relatedZLocationUnits',
-                                         db_column='zLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', verbose_name="spatial reference",
-                                           db_column='spatialReferenceId', blank=True, null=True,
+    xlocation = models.FloatField(verbose_name="x location", blank=True, null=True)
+    xlocationunitsid = models.ForeignKey('Units', verbose_name="x location units", related_name='relatedXlocationUnits',
+                                         db_column='xlocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
+    ylocation = models.FloatField(blank=True, verbose_name="y location", null=True)
+    ylocationunitsid = models.ForeignKey('Units', verbose_name="y location units", related_name='relatedYlocationUnits',
+                                         db_column='ylocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
+    zlocation = models.FloatField(blank=True, verbose_name="z location", null=True)
+    zlocationunitsid = models.ForeignKey('Units', verbose_name="z location units", related_name='relatedZlocationUnits',
+                                         db_column='zlocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
+    spatialreferenceid = models.ForeignKey('Spatialreferences', verbose_name="spatial reference",
+                                           db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, verbose_name="censor code", db_column='censorCodeCV',
+    censorcodecv = models.ForeignKey(CvCensorcode, verbose_name="censor code", db_column='censorcodecv',
                                      on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, verbose_name="quality code", db_column='qualitycodecv',
+    qualitycodecv = models.ForeignKey(CvQualitycode, verbose_name="quality code", db_column='qualitycodecv',
                                       on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, verbose_name="aggregation statistic",
-                                               db_column='aggregationStatisticCV', on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField(verbose_name="time aggregation interval")
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units',
-                                                       verbose_name="time aggregation " +
-                                                                    "interval unit",
-                                                       related_name='+',
-                                                       db_column='timeaggregationintervalunitsid',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, verbose_name="aggregation statistic",
+                                               db_column='aggregationstatisticcv', on_delete=models.CASCADE)
+    timeaggregationinterval = models.FloatField(verbose_name="time aggregation interval")
+    timeaggregationintervalunitsid = models.ForeignKey('Units', verbose_name="time aggregation interval unit",
+                                                       related_name='+', db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u", %s" % self.qualityCodeCV
+        s = u"%s " % self.resultid
+        s += u", %s" % self.qualitycodecv
         return s
 
     class Meta:
         managed = False
-        db_table = 'MeasurementResults'
-        ordering = ['censorCodeCV', 'resultId']
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MeasurementResults'
+        else:
+            db_table = r'measurementresults'
+        ordering = ['censorcodecv', 'resultid']
         verbose_name = 'measurement result'
 
 
-# ======================================================================================================================
-# Measurement results value annotations table
-# ======================================================================================================================
-class MeasurementResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('MeasurementResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Measurementresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Measurementresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'MeasurementResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MeasurementResultValueAnnotations'
+        else:
+            db_table = r'measurementresultvalueannotations'
 
 
-# ======================================================================================================================
-# Measurement results values table
-# ======================================================================================================================
-class MeasurementResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(MeasurementResults, verbose_name='Result Series', db_column='resultid',
+class Measurementresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Measurementresults, verbose_name='Result Series', db_column='resultid',
                                  on_delete=models.CASCADE)
-    dataValue = models.FloatField(verbose_name='data value')
-    valueDateTime = models.DateTimeField(verbose_name='value date time')
-    valueDateTimeUtcOffset = models.IntegerField(verbose_name='value date time UTC offset', default=-5)
+    datavalue = models.FloatField(verbose_name='data value')
+    valuedatetime = models.DateTimeField(verbose_name='value date time')
+    valuedatetimeutcoffset = models.IntegerField(verbose_name='value date time UTC offset', default=-5)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u"- %s" % self.dataValue
-        s += u"- %s" % self.valueDateTime
+        s = u"%s " % self.resultid
+        s += u"- %s" % self.datavalue
+        s += u"- %s" % self.valuedatetime
         return s
 
     @staticmethod
-    def csv_header():
-        s = 'databaseId,'
+    def csvheader():
+        s = 'databaseid,'
         s += 'Date and Time,'
         s += 'sampling feature/location,'
         s += 'time aggregation interval,'
         s += 'time aggregation unit,'
         s += 'citation,'
+
         return s
 
-    def csv_output(self):
-        s = str(self.valueId)
-        s += ', {0}'.format(self.valueDateTime)
-        s += ',\" {0}\"'.format(self.resultId.resultId.featureActionId.samplingFeatureId.samplingFeatureName)
-        s += ', {0}'.format(self.resultId.timeaggregationinterval)
-        s += ', {0},'.format(self.resultId.timeaggregationintervalunitsid)
+    def csvoutput(self):
+        s = str(self.valueid)
+        s += ', {0}'.format(self.valuedatetime)
+        s += ',\" {0}\"'.format(
+            self.resultid.resultid.featureactionid.samplingfeatureid.samplingfeaturename)
+        s += ', {0}'.format(self.resultid.timeaggregationinterval)
+        s += ', {0},'.format(self.resultid.timeaggregationintervalunitsid)
         s = build_citation(s, self)
         return s
 
-    def csv_header_short(self):
+    def csvheaderShort(self):
         s = '\" {0} -unit-{1}-processing level-{2}\",annotation,'.format(
-            self.resultId.resultId.variableId.variableCode,
-            self.resultId.resultId.unitsId.unitsName,
-            self.resultId.resultId.processing_level)
+            self.resultid.resultid.variableid.variablecode,
+            self.resultid.resultid.unitsid.unitsname,
+            self.resultid.resultid.processing_level)
         return s
 
-    def csv_output_short(self):
-        s = '{0}'.format(self.dataValue)
-        mrv_annotation = MeasurementResultValueAnnotations.objects.filter(valueId=self.valueId)
-        annotations = Annotations.objects.filter(annotationId__in=mrv_annotation)
+    def csvoutputShort(self):
+        s = '{0}'.format(self.datavalue)
+        mrvannotation = Measurementresultvalueannotations.objects.filter(valueid=self.valueid)
+        annotations = Annotations.objects.filter(annotationid__in=mrvannotation)
         s += ',\"'
-        for annotation in annotations:
-            s += '{0} '.format(annotation)
+        for anno in annotations:
+            s += '{0} '.format(anno)
         s += '\"'
         s += ','
         return s
 
     class Meta:
         managed = False
-        db_table = 'MeasurementResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MeasurementResultValues'
+        else:
+            db_table = r'measurementresultvalues'
         verbose_name = 'measurement result value'
 
 
-# ======================================================================================================================
-# Measurement results value file table
-# ======================================================================================================================
-class MeasurementResultValueFile(models.Model):
+class MeasurementresultvalueFile(models.Model):
     valueFileid = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(MeasurementResults,
-                                 help_text="CAUTION saving a measurement " +
-                                           "result value file will attempt to " +
+    resultid = models.ForeignKey(Measurementresults,
+                                 help_text="CAUTION saving a measurement result value file will attempt to " +
                                            "load values into the database.", verbose_name='result',
-                                 db_column='resultId',
-                                 on_delete=models.CASCADE)
-    valueFile = models.FileField(upload_to='resultValues', verbose_name="value file ")
+                                 db_column='resultid', on_delete=models.CASCADE)
+    valueFile = models.FileField(upload_to='resultvalues', verbose_name="value file ")
 
     def __str__(self):
-        s = u"%s" % self.resultId
+        s = u"%s" % self.resultid
         return s
 
     class Meta:
         managed = False
-        db_table = 'ODM2EXTRA.MeasurementResultValuefile'
+        db_table = r'odm2extra"."Measurementresultvaluefile'
         verbose_name = 'measurement result value file'
 
     def save(self, *args, **kwargs):
         handle_uploaded_file(self.valueFile.file, self.resultid)
-        super(MeasurementResultValueFile, self).save(*args, **kwargs)
+        super(MeasurementresultvalueFile, self).save(*args, **kwargs)
 
 
-# ======================================================================================================================
-# Method annotations table
-# ======================================================================================================================
-class MethodAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    methodId = models.ForeignKey('Methods', db_column='methodId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Methodannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    methodid = models.ForeignKey('Methods', db_column='methodid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'MethodAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MethodAnnotations'
+        else:
+            db_table = r'methodannotations'
 
 
-# ======================================================================================================================
-# Method citations table
-# ======================================================================================================================
-class MethodCitations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    methodId = models.ForeignKey('Methods', db_column='methodId', verbose_name='method', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV',
+class Methodcitations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    methodid = models.ForeignKey('Methods', db_column='methodid', verbose_name='method', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv',
                                            verbose_name='relationship type', on_delete=models.CASCADE)
-    citationId = models.ForeignKey(Citations, db_column='citationId', verbose_name='citation', on_delete=models.CASCADE)
+    citationid = models.ForeignKey(Citations, db_column='citationid', verbose_name='citation', on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.methodId
-        s += u"-, %s" % self.citationId
+        s = u"%s " % self.methodid
+        s += u"-, %s" % self.citationid
         return s
 
     class Meta:
         managed = False
-        db_table = 'MethodCitations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MethodCitations'
+        else:
+            db_table = r'methodcitations'
         verbose_name = 'method citation'
 
 
-# ======================================================================================================================
-# Method extension property values table
-# ======================================================================================================================
-class MethodExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    methodId = models.ForeignKey('Methods', db_column='methodId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey(ExtensionProperties, db_column='propertyId', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255)
+class Methodextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    methodid = models.ForeignKey('Methods', db_column='methodid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey(Extensionproperties, db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255)
 
     class Meta:
         managed = False
-        db_table = 'MethodExtensionPropertyValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MethodExtensionPropertyValues'
+        else:
+            db_table = r'methodextensionpropertyvalues'
 
 
-# ======================================================================================================================
-# Method external identifiers values table
-# ======================================================================================================================
-class MethodExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    methodId = models.ForeignKey('Methods', db_column='methodId', on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+class Methodexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    methodid = models.ForeignKey('Methods', db_column='methodid', on_delete=models.CASCADE)
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    methodExternalIdentifier = models.CharField(max_length=255)
-    methodExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    methodexternalidentifier = models.CharField(max_length=255)
+    methodexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'MethodExternalIdentifiers'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'MethodExternalIdentifiers'
+        else:
+            db_table = r'methodexternalidentifiers'
 
 
-# ======================================================================================================================
-# Methods table
-# ======================================================================================================================
 class Methods(models.Model):
-    methodId = models.AutoField(primary_key=True)
-    methodTypeCV = models.ForeignKey(CvMethodType, verbose_name='method type',
+    methodid = models.AutoField(primary_key=True)
+    methodtypecv = models.ForeignKey(CvMethodtype, verbose_name='method type',
                                      help_text='A vocabulary for describing types of Methods '
                                                'associated with creating observations. '
-                                               'MethodTypes correspond with ActionTypes in  '
+                                               'MethodTypes correspond with ActionTypes in ODM2. '
                                                'An Action must be performed using an '
                                                'appropriate MethodType - e.g., a specimen '
                                                'collection Action should be associated with a '
                                                'specimen collection method. details for '
                                                'individual values '
-                                               'here: http://vocabulary.org/methodtype/',
-                                     db_column='methodTypeCV', on_delete=models.CASCADE)
-    methodCode = models.CharField(verbose_name='method code', max_length=50)
-    methodName = models.CharField(verbose_name='method name', max_length=255)
-    methodDescription = models.CharField(verbose_name='method description', max_length=5000,
-                                         blank=True)
-    methodLink = models.CharField(verbose_name='web link for method', max_length=255, blank=True)
-    organizationId = models.ForeignKey('Organizations', verbose_name='organization', db_column='organizationId',
+                                               'here: http://vocabulary.odm2.org/methodtype/',
+                                     db_column='methodtypecv', on_delete=models.CASCADE)
+    methodcode = models.CharField(verbose_name='method code', max_length=50)
+    methodname = models.CharField(verbose_name='method name', max_length=255)
+    methoddescription = models.CharField(verbose_name='method description', max_length=5000, blank=True)
+    methodlink = models.CharField(verbose_name='web link for method', max_length=255, blank=True)
+    organizationid = models.ForeignKey('Organizations', verbose_name='organization', db_column='organizationid',
                                        blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.methodCode
-        if self.methodTypeCV:
-            s += u", %s" % self.methodTypeCV
+        s = u"%s " % self.methodcode
+        if self.methodtypecv:
+            s += u", %s" % self.methodtypecv
         return s
 
     class Meta:
         managed = False
-        db_table = 'Methods'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Methods'
+        else:
+            db_table = r'methods'
         verbose_name = 'method'
-        ordering = ["methodName"]
+        ordering = ["methodname"]
 
 
-# ======================================================================================================================
-# Model affiliations table
-# ======================================================================================================================
-class ModelAffiliations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    modelId = models.ForeignKey('Models', db_column='modelId', on_delete=models.CASCADE)
-    affiliationId = models.ForeignKey(Affiliations, db_column='affiliationId', on_delete=models.CASCADE)
-    isPrimary = models.BooleanField()
-    roleDescription = models.CharField(max_length=5000, blank=True)
+class Modelaffiliations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    modelid = models.ForeignKey('Models', db_column='modelid', on_delete=models.CASCADE)
+    affiliationid = models.ForeignKey(Affiliations, db_column='affiliationid', on_delete=models.CASCADE)
+    isprimary = models.BooleanField()
+    roledescription = models.CharField(max_length=5000, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'ModelAffiliations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ModelAffiliations'
+        else:
+            db_table = r'modelaffiliations'
 
 
-# ======================================================================================================================
-# Models table
-# ======================================================================================================================
 class Models(models.Model):
-    modelId = models.AutoField(primary_key=True)
-    modelCode = models.CharField(max_length=50)
-    modelName = models.CharField(max_length=255)
-    modelDescription = models.CharField(max_length=5000, blank=True)
+    modelid = models.AutoField(primary_key=True)
+    modelcode = models.CharField(max_length=50)
+    modelname = models.CharField(max_length=255)
+    modeldescription = models.CharField(max_length=5000, blank=True)
     version = models.CharField(max_length=255, blank=True)
-    modelLink = models.CharField(max_length=255, blank=True)
+    modellink = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'Models'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Models'
+        else:
+            db_table = r'models'
 
 
-# ======================================================================================================================
-# Organizations table
-# ======================================================================================================================
 class Organizations(models.Model):
-    organizationId = models.AutoField(primary_key=True)
-    organizationTypeCV = models.ForeignKey(CvOrganizationType, verbose_name="organization type",
-                                           db_column='organizationTypeCV', on_delete=models.CASCADE)
-    organizationCode = models.CharField(verbose_name="organization code", max_length=50)
-    organizationName = models.CharField(verbose_name="organization name", max_length=255)
-    organizationDescription = models.CharField(verbose_name="organization description", max_length=5000, blank=True)
-    organizationLink = models.CharField(verbose_name="organization web link", max_length=255, blank=True)
-    parentOrganizationId = models.ForeignKey('self', verbose_name="parent organization",
-                                             db_column='parentOrganizationId', blank=True, null=True, default=1,
+    organizationid = models.AutoField(primary_key=True)
+    organizationtypecv = models.ForeignKey(CvOrganizationtype, verbose_name="organization type",
+                                           db_column='organizationtypecv', on_delete=models.CASCADE)
+    organizationcode = models.CharField(verbose_name="organization code", max_length=50)
+    organizationname = models.CharField(verbose_name="organization name", max_length=255)
+    organizationdescription = models.CharField(verbose_name="organization description", max_length=5000, blank=True)
+    organizationlink = models.CharField(verbose_name="organization web link", max_length=255, blank=True)
+    parentorganizationid = models.ForeignKey('self', verbose_name="parent organization",
+                                             db_column='parentorganizationid', blank=True, null=True, default=1,
                                              on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.organizationCode
-        if self.organizationName:
-            s += u", %s" % self.organizationName
+        s = u"%s" % self.organizationcode
+        if self.organizationname:
+            s += u", %s" % self.organizationname
         return s
 
     class Meta:
         managed = False
-        db_table = 'Organizations'
-        verbose_name = 'Organization'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Organizations'
+        else:
+            db_table = r'organizations'
+        verbose_name = 'organization'
 
 
-# ======================================================================================================================
-# People table
-# ======================================================================================================================
 class People(models.Model):
-    personId = models.AutoField(primary_key=True)
-    personFirstName = models.CharField(max_length=255, verbose_name="first name")
-    personMiddleName = models.CharField(max_length=255, verbose_name="middle name", blank=True)
-    personLastName = models.CharField(max_length=255, verbose_name="last name")
+    personid = models.AutoField(primary_key=True)
+    personfirstname = models.CharField(max_length=255, verbose_name="first name")
+    personmiddlename = models.CharField(max_length=255, verbose_name="middle name", blank=True)
+    personlastname = models.CharField(max_length=255, verbose_name="last name")
 
     def __str__(self):
-        s = u"%s" % self.personLastName
-        if self.personFirstName:
-            s += u", %s" % self.personFirstName
+        s = u"%s" % self.personlastname
+        if self.personfirstname:
+            s += u", %s" % self.personfirstname
         return s
 
     class Meta:
         managed = False
-        db_table = 'People'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'People'
+        else:
+            db_table = r'people'
         verbose_name = 'people'
         verbose_name_plural = 'people'
-        ordering = ["personLastName"]
+        ordering = ["personlastname"]
 
 
-# ======================================================================================================================
-# Person external identifiers table
-# ======================================================================================================================
-class PersonExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    personId = models.ForeignKey(People, db_column='personId', on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+class Personexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    personid = models.ForeignKey(People, db_column='personid', on_delete=models.CASCADE)
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    personExternalIdentifier = models.CharField(max_length=255)
-    personExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    personexternalidentifier = models.CharField(max_length=255)
+    personexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         s = u"%s - %s - %s - %s" % (
-            self.personId, self.externalIdentifierSystemId, self.personExternalIdentifier,
-            self.personExternalIdentifierURI)
+            self.personid, self.externalidentifiersystemid, self.personexternalidentifier,
+            self.personexternalidentifieruri)
         return s
 
     class Meta:
         managed = False
-        db_table = 'PersonExternalIdentifiers'
-        verbose_name_plural = 'ORC ID (Person Unique Identifier)'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'PersonExternalIdentifiers'
+        else:
+            db_table = r'personexternalidentifiers'
+        verbose_name_plural = 'ORCID (Person Unique Identifier)'
 
 
-# ======================================================================================================================
-# Point coverage results table
-# ======================================================================================================================
-class PointCoverageResults(models.Model):
-    resultId = models.OneToOneField('Results', db_column='resultid', primary_key=True, on_delete=models.CASCADE)
-    zLocation = models.FloatField(blank=True, null=True)
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId', blank=True, null=True,
+class Pointcoverageresults(models.Model):
+    resultid = models.OneToOneField('Results', db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    zlocation = models.FloatField(blank=True, null=True)
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', db_column='spatialReferenceId', blank=True, null=True,
+    spatialreferenceid = models.ForeignKey('Spatialreferences', db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedXSpacing = models.FloatField(blank=True, null=True)
-    intendedXSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedXSpacingUnitsId',
+    intendedxspacing = models.FloatField(blank=True, null=True)
+    intendedxspacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedxspacingunitsid',
                                                 blank=True, null=True, on_delete=models.CASCADE)
-    intendedYSpacing = models.FloatField(blank=True, null=True)
-    intendedYSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedYSpacingUnitsId',
+    intendedyspacing = models.FloatField(blank=True, null=True)
+    intendedyspacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedyspacingunitsid',
                                                 blank=True, null=True, on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField()
-    timeAggregationIntervalUnitsId = models.IntegerField()
+    timeaggregationinterval = models.FloatField()
+    timeaggregationintervalunitsid = models.IntegerField()
 
     class Meta:
         managed = False
-        db_table = 'PointCoverageResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'PointCoverageResults'
+        else:
+            db_table = r'pointcoverageresults'
 
 
-# ======================================================================================================================
-# Point coverage result value annotations table
-# ======================================================================================================================
-class PointCoverageResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('PointCoverageResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Pointcoverageresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Pointcoverageresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'PointCoverageResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'PointCoverageResultValueAnnotations'
+        else:
+            db_table = r'pointcoverageresultvalueannotations'
 
 
-# ======================================================================================================================
-# Point coverage result value annotations table
-# ======================================================================================================================
-class PointCoverageResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(PointCoverageResults, db_column='resultId', on_delete=models.CASCADE)
-    dataValue = models.BigIntegerField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    xLocation = models.FloatField()
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId',
+class Pointcoverageresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Pointcoverageresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.BigIntegerField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    xlocation = models.FloatField()
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid',
                                          on_delete=models.CASCADE)
-    yLocation = models.FloatField()
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId',
+    ylocation = models.FloatField()
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid',
                                          on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'PointCoverageResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'PointCoverageResultValues'
+        else:
+            db_table = r'pointcoverageresultvalues'
 
 
-# ======================================================================================================================
-# Processing levels table
-# ======================================================================================================================
-class ProcessingLevels(models.Model):
-    processingLevelId = models.AutoField(primary_key=True)
-    processingLevelCode = models.CharField(verbose_name='processing level code', max_length=50)
+class Processinglevels(models.Model):
+    processinglevelid = models.AutoField(primary_key=True)
+    processinglevelcode = models.CharField(verbose_name='processing level code', max_length=50)
     definition = models.CharField(max_length=5000, blank=True)
     explanation = models.CharField(max_length=5000, blank=True)
 
     def __str__(self):
-        s = u"%s " % self.processingLevelCode
+        s = u"%s " % self.processinglevelcode
         if self.definition:
             s += u", %s" % self.definition
         return s
 
     class Meta:
         managed = False
-        db_table = 'ProcessingLevels'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ProcessingLevels'
+        else:
+            db_table = r'processinglevels'
         verbose_name = 'processing level'
 
 
-# ======================================================================================================================
-# Profile results table
-# ======================================================================================================================
-class ProfileResults(models.Model):
-    resultId = models.OneToOneField('Results', verbose_name='result', db_column='resultId', primary_key=True,
+class Profileresults(models.Model):
+    resultid = models.OneToOneField('Results', verbose_name='result', db_column='resultid', primary_key=True,
                                     on_delete=models.CASCADE)
-    xLocation = models.FloatField(blank=True, verbose_name='x location', null=True)
-    xLocationUnitsId = models.ForeignKey('Units', verbose_name='x location units', related_name='+',
-                                         db_column='xLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
-    yLocation = models.FloatField(blank=True, verbose_name='y location', null=True)
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', verbose_name='y location units',
-                                         db_column='yLocationUnitsId', blank=True, null=True, on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', verbose_name='spatial reference',
-                                           db_column='spatialReferenceId', blank=True, null=True,
+    xlocation = models.FloatField(blank=True, verbose_name='x location', null=True)
+    xlocationunitsid = models.ForeignKey('Units', verbose_name='x location units', related_name='+',
+                                         db_column='xlocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
+    ylocation = models.FloatField(blank=True, verbose_name='y location', null=True)
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', verbose_name='y location units',
+                                         db_column='ylocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
+    spatialreferenceid = models.ForeignKey('Spatialreferences', verbose_name='spatial reference',
+                                           db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedZSpacing = models.FloatField(blank=True, verbose_name='intended depth', null=True)
-    intendedZSpacingUnitsId = models.ForeignKey('Units', verbose_name='intended depth units', related_name='+',
-                                                db_column='intendedZSpacingUnitsId', blank=True, null=True,
+    intendedzspacing = models.FloatField(blank=True, verbose_name='intended depth', null=True)
+    intendedzspacingunitsid = models.ForeignKey('Units', verbose_name='intended depth units', related_name='+',
+                                                db_column='intendedzspacingunitsid', blank=True, null=True,
                                                 on_delete=models.CASCADE)
-    intendedTimeSpacing = models.FloatField(blank=True, null=True, verbose_name='intended time spacing')
-    intendedTimeSpacingUnitsId = models.ForeignKey('Units', verbose_name='intended time spacing unit', related_name='+',
-                                                   db_column='intendedTimeSpacingUnitsId', blank=True, null=True,
-                                                   on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, verbose_name='aggregation statistic',
-                                               db_column='aggregationStatisticCV', on_delete=models.CASCADE)
+    intendedtimespacing = models.FloatField(blank=True, null=True, verbose_name='intended time spacing')
+    intendedtimespacingunitsid = models.ForeignKey('Units', verbose_name='intended time spacing unit',
+                                                   related_name='+', db_column='intendedtimespacingunitsid',
+                                                   blank=True, null=True, on_delete=models.CASCADE)
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, verbose_name='aggregation statistic',
+                                               db_column='aggregationstatisticcv', on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.resultId
-        if self.xLocation:
-            s += u"- %s" % self.xLocation
-        if self.xLocationUnitsId:
-            s += u", %s" % self.xLocationUnitsId
-        if self.yLocation:
-            s += u"- %s" % self.yLocation
-        if self.yLocationUnitsId:
-            s += u", %s" % self.yLocationUnitsId
-        if self.intendedZSpacing:
-            s += u"- %s" % self.intendedZSpacing
-        if self.intendedZSpacingUnitsId:
-            s += u", %s" % self.intendedZSpacingUnitsId
+        s = u"%s" % self.resultid
+        if self.xlocation:
+            s += u"- %s" % self.xlocation
+        if self.xlocationunitsid:
+            s += u", %s" % self.xlocationunitsid
+        if self.ylocation:
+            s += u"- %s" % self.ylocation
+        if self.ylocationunitsid:
+            s += u", %s" % self.ylocationunitsid
+        if self.intendedzspacing:
+            s += u"- %s" % self.intendedzspacing
+        if self.intendedzspacingunitsid:
+            s += u", %s" % self.intendedzspacingunitsid
         return s
 
     class Meta:
         managed = False
-        db_table = 'ProfileResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ProfileResults'
+        else:
+            db_table = r'profileresults'
         verbose_name = 'profile result'
 
 
-# ======================================================================================================================
-# Profile result value annotations table
-# ======================================================================================================================
-class ProfileResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('ProfileResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Profileresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Profileresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ProfileResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ProfileResultValueAnnotations'
+        else:
+            db_table = r'profileresultvalueannotations'
 
 
-# ======================================================================================================================
-# Profile result values table
-# ======================================================================================================================
-class ProfileResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(ProfileResults, db_column='resultid', on_delete=models.CASCADE)
-    dataValue = models.FloatField(verbose_name='data value')
-    valueDateTime = models.DateTimeField(verbose_name='value date and time', blank=True, null=True)
-    valueDateTimeUtcOffset = models.IntegerField(verbose_name='value date and time UTC offset', blank=True, null=True)
-    zLocation = models.FloatField(verbose_name='z location', blank=True, null=True)
-    zAggregationInterval = models.FloatField(verbose_name='z aggregation interval', blank=True, null=True)
-    zLocationUnitsId = models.ForeignKey('Units', verbose_name='z location unit', related_name='+',
+class Profileresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Profileresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField(verbose_name='data value')
+    valuedatetime = models.DateTimeField(verbose_name='value date and time', blank=True, null=True)
+    valuedatetimeutcoffset = models.IntegerField(verbose_name='value date and time UTC offset', blank=True, null=True)
+    zlocation = models.FloatField(verbose_name='z location', blank=True, null=True)
+    zaggregationinterval = models.FloatField(verbose_name='z aggregation interval', blank=True, null=True)
+    zlocationunitsid = models.ForeignKey('Units', verbose_name='z location unit', related_name='+',
                                          db_column='zlocationunitsid', blank=True, null=True, on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, verbose_name='censor code', db_column='censorcodecv',
+    censorcodecv = models.ForeignKey(CvCensorcode, verbose_name='censor code', db_column='censorcodecv',
                                      on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, verbose_name='quality code', db_column='qualitycodecv',
+    qualitycodecv = models.ForeignKey(CvQualitycode, verbose_name='quality code', db_column='qualitycodecv',
                                       on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField(verbose_name='time aggregation interval', blank=True, null=True)
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units',
-                                                       verbose_name='time aggregation interval unit',
-                                                       related_name='+',
-                                                       db_column='timeAggregationIntervalUnitsId',
+    timeaggregationinterval = models.FloatField(verbose_name='time aggregation interval', blank=True, null=True)
+    timeaggregationintervalunitsid = models.ForeignKey('Units', verbose_name='time aggregation interval unit',
+                                                       related_name='+', db_column='timeaggregationintervalunitsid',
                                                        blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u", %s" % self.dataValue
-        s += u", %s" % self.zLocation
-        s += u", %s" % self.zLocationUnitsId
+        s = u"%s " % self.resultid
+        s += u", %s" % self.datavalue
+        s += u", %s" % self.zlocation
+        s += u", %s" % self.zlocationunitsid
         return s
 
     @staticmethod
-    def csv_header():
-        s = 'databaseId,'
+    def csvheader():
+        s = 'databaseid,'
         s += 'depth,'
         s += 'sampling feature/location,'
         s += 'sampling feature uri,'
@@ -1989,972 +2154,1025 @@ class ProfileResultValues(models.Model):
         s = build_citation('', self)
         return s
 
-    def csv_header_short(self):
+    def csvheaderShort(self):
         s = ',\" {0} -unit-{1}-processing level-{2}\"'.format(
-            self.resultId.resultId.variableId.variableCode,
-            self.resultId.resultId.unitsId.unitsName,
-            self.resultId.resultId.processing_level)
+            self.resultid.resultid.variableid.variablecode,
+            self.resultid.resultid.unitsid.unitsname,
+            self.resultid.resultid.processing_level)
         return s
 
-    def csv_output(self):
-        s = '{0}'.format(self.resultId.resultId.resultId)
-        s += ', {0}-{1} {2} '.format((self.zLocation - self.zAggregationInterval), self.zLocation,
-                                     self.zLocationUnitsId)
-        s += ',\" {0}\"'.format(self.resultId.resultId.featureActionId.samplingFeatureId.samplingFeatureName)
+    def csvoutput(self):
+        s = '{0}'.format(self.resultid.resultid.resultid)  # .samplingfeatureid.samplingfeatureid
+        s += ', {0}-{1} {2} '.format((self.zlocation - self.zaggregationinterval), self.zlocation,
+                                     self.zlocationunitsid)
+        s += ',\" {0}\"'.format(
+            self.resultid.resultid.featureactionid.samplingfeatureid.samplingfeaturename)
         try:
-            ss = SamplingFeatureExternalIdentifiers.objects.filter(
-                samplingfeatureid=self.resultId.resultId.featureActionId.samplingFeatureId).get()
-            s += ', {0}'.format(ss.samplingFeatureExternalIdentifierURI)
-        except SamplingFeatureExternalIdentifiers.DoesNotExist:
+            sfei = Samplingfeatureexternalidentifiers.objects.filter(
+                samplingfeatureid=self.resultid.resultid.featureactionid.samplingfeatureid).get()
+            s += ', {0}'.format(sfei.samplingfeatureexternalidentifieruri)
+        except Samplingfeatureexternalidentifiers.DoesNotExist:
             s += ','
-        s += ',\" {0}\"'.format(self.resultId.resultId.featureActionId.action.method.methodDescription)
+        s += ',\" {0}\"'.format(
+            self.resultid.resultid.featureactionid.action.method.methoddescription)
         s = build_citation(s, self)
         s += ','
         return s
 
-    def csv_output_short(self):
-        s = '{0}'.format(self.dataValue)
+    def csvoutputShort(self):
+        s = '{0}'.format(self.datavalue)
         s += ','
         return s
 
     class Meta:
         managed = False
-        db_table = 'ProfileResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ProfileResultValues'
+        else:
+            db_table = r'profileresultvalues'
         verbose_name = 'profile result value'
 
 
-# ======================================================================================================================
-# Reference material external identifiers table
-# ======================================================================================================================
-class ReferenceMaterialExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    referenceMaterialId = models.ForeignKey('ReferenceMaterials', db_column='referenceMaterialId',
+class Referencematerialexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    referencematerialid = models.ForeignKey('Referencematerials', db_column='referencematerialid',
                                             on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    referenceMaterialExternalIdentifier = models.CharField(max_length=255)
-    referenceMaterialExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    referencematerialexternalidentifier = models.CharField(max_length=255)
+    referencematerialexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'ReferenceMaterialExternalIdentifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ReferenceMaterialExternalIdentifiers'
+        else:
+            db_table = r'referencematerialexternalidentifiers'
 
 
-# ======================================================================================================================
-# Reference material external identifiers table
-# ======================================================================================================================
-class ReferenceMaterials(models.Model):
-    referenceMaterialId = models.AutoField(primary_key=True)
-    referenceMaterialMediumCV = models.ForeignKey(CvReferenceMaterialMedium, db_column='referenceMaterialMediumCV',
+class Referencematerials(models.Model):
+    referencematerialid = models.AutoField(primary_key=True)
+    referencematerialmediumcv = models.ForeignKey(CvReferencematerialmedium, db_column='referencematerialmediumcv',
                                                   on_delete=models.CASCADE)
-    referenceMaterialOrganizationId = models.ForeignKey(Organizations, db_column='referenceMaterialOrganizationId',
+    referencematerialorganizationid = models.ForeignKey(Organizations, db_column='referencematerialorganizationid',
                                                         on_delete=models.CASCADE)
-    referenceMaterialCode = models.CharField(max_length=50)
-    referenceMaterialLotCode = models.CharField(max_length=255, blank=True)
-    referenceMaterialPurchaseDate = models.DateTimeField(blank=True, null=True)
-    referenceMaterialExpirationDate = models.DateTimeField(blank=True, null=True)
-    referenceMaterialCertificateLink = models.CharField(max_length=255, blank=True)
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', blank=True, null=True,
+    referencematerialcode = models.CharField(max_length=50)
+    referencemateriallotcode = models.CharField(max_length=255, blank=True)
+    referencematerialpurchasedate = models.DateTimeField(blank=True, null=True)
+    referencematerialexpirationdate = models.DateTimeField(blank=True, null=True)
+    referencematerialcertificatelink = models.CharField(max_length=255, blank=True)
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', db_column='samplingfeatureid', blank=True, null=True,
                                           on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ReferenceMaterials'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ReferenceMaterials'
+        else:
+            db_table = r'referencematerials'
 
 
-# ======================================================================================================================
-# Reference material values table
-# ======================================================================================================================
-class ReferenceMaterialValues(models.Model):
-    referenceMaterialValueId = models.AutoField(primary_key=True)
-    referenceMaterialId = models.ForeignKey(ReferenceMaterials, db_column='referencematerialId',
+class Referencematerialvalues(models.Model):
+    referencematerialvalueid = models.AutoField(primary_key=True)
+    referencematerialid = models.ForeignKey(Referencematerials, db_column='referencematerialid',
                                             on_delete=models.CASCADE)
-    referenceMaterialValue = models.FloatField()
-    referenceMaterialAccuracy = models.FloatField(blank=True, null=True)
-    variableId = models.ForeignKey('Variables', db_column='variableId', on_delete=models.CASCADE)
-    unitsId = models.ForeignKey('Units', related_name='+', db_column='unitsId', on_delete=models.CASCADE)
-    citationId = models.ForeignKey(Citations, db_column='citationid', on_delete=models.CASCADE)
+    referencematerialvalue = models.FloatField()
+    referencematerialaccuracy = models.FloatField(blank=True, null=True)
+    variableid = models.ForeignKey('Variables', db_column='variableid', on_delete=models.CASCADE)
+    unitsid = models.ForeignKey('Units', related_name='+', db_column='unitsid', on_delete=models.CASCADE)
+    citationid = models.ForeignKey(Citations, db_column='citationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ReferenceMaterialValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ReferenceMaterialValues'
+        else:
+            db_table = r'referencematerialvalues'
 
 
-# ======================================================================================================================
-# Related actions table
-# ======================================================================================================================
-class RelatedActions(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey(Actions, verbose_name='action', db_column='actionId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, verbose_name='relationship type',
-                                           db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedActionId = models.ForeignKey(Actions, verbose_name='related action', related_name='RelatedActions',
-                                        db_column='relatedActionId', on_delete=models.CASCADE)
+class Relatedactions(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey(Actions, verbose_name='action', db_column='actionid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, verbose_name='relationship type',
+                                           db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedactionid = models.ForeignKey(Actions, verbose_name='related action', related_name='RelatedActions',
+                                        db_column='relatedactionid', on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.actionId
-        if self.relationshipTypeCV:
-            s += u", %s" % self.relationshipTypeCV
-        if self.relatedActionId:
-            s += u", %s" % self.relatedActionId
+        s = u"%s" % self.actionid
+        if self.relationshiptypecv:
+            s += u", %s" % self.relationshiptypecv
+        if self.relatedactionid:
+            s += u", %s" % self.relatedactionid
         return s
 
     class Meta:
         managed = False
-        db_table = 'RelatedActions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedActions'
+        else:
+            db_table = r'relatedactions'
         verbose_name = 'related action (associates one action with another)'
         verbose_name_plural = 'related action (associates one action with another)'
 
 
-# ======================================================================================================================
-# Related annotations table
-# ======================================================================================================================
-class RelatedAnnotations(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedAnnotationId = models.ForeignKey(Annotations, related_name='RelatedAnnotations',
-                                            db_column='relatedAnnotationId', on_delete=models.CASCADE)
+class Relatedannotations(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedannotationid = models.ForeignKey(Annotations, related_name='RelatedAnnotations',
+                                            db_column='relatedannotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'RelatedAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedAnnotations'
+        else:
+            db_table = r'relatedannotations'
 
 
-# ======================================================================================================================
-# Related citations table
-# ======================================================================================================================
-class RelatedCitations(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    citationId = models.ForeignKey(Citations, db_column='citationId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedCitationId = models.ForeignKey(Citations, related_name='RelatedCitations', db_column='relatedCitationId',
+class Relatedcitations(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    citationid = models.ForeignKey(Citations, db_column='citationid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedcitationid = models.ForeignKey(Citations, related_name='RelatedCitations', db_column='relatedcitationid',
                                           on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'RelatedCitations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedCitations'
+        else:
+            db_table = r'relatedcitations'
 
 
-# ======================================================================================================================
-# Related datasets table
-# ======================================================================================================================
-class RelatedDatasets(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    datasetId = models.ForeignKey(Datasets, db_column='datasetId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedDatasetId = models.ForeignKey(Datasets, related_name='relatedDataset', db_column='relatedDatasetId',
+class Relateddatasets(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    datasetid = models.ForeignKey(Datasets, db_column='datasetid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relateddatasetid = models.ForeignKey(Datasets, related_name='relatedDataset', db_column='relateddatasetid',
                                          on_delete=models.CASCADE)
-    versionCode = models.CharField(max_length=50, blank=True)
+    versioncode = models.CharField(max_length=50, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'RelatedDatasets'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedDatasets'
+        else:
+            db_table = r'relateddatasets'
 
 
-# ======================================================================================================================
-# Related equipment table
-# ======================================================================================================================
-class RelatedEquipment(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    equipmentId = models.ForeignKey(Equipment, db_column='equipmentId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedEquipmentId = models.ForeignKey(Equipment, related_name='relatedEquipment', db_column='relatedEquipmentId',
+class Relatedequipment(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    equipmentid = models.ForeignKey(Equipment, db_column='equipmentid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedequipmentid = models.ForeignKey(Equipment, related_name='RelatedEquipment', db_column='relatedequipmentid',
                                            on_delete=models.CASCADE)
-    relationshipStartDateTime = models.DateTimeField()
-    relationshipStartDateTimeUtcOffset = models.IntegerField()
-    relationshipEndDateTime = models.DateTimeField(blank=True, null=True)
-    relationshipEndDateTimeUtcOffset = models.IntegerField(blank=True, null=True)
+    relationshipstartdatetime = models.DateTimeField()
+    relationshipstartdatetimeutcoffset = models.IntegerField()
+    relationshipenddatetime = models.DateTimeField(blank=True, null=True)
+    relationshipenddatetimeutcoffset = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
-        db_table = 'RelatedEquipment'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedEquipment'
+        else:
+            db_table = r'relatedequipment'
 
 
-# ======================================================================================================================
-# Related Features table
-# ======================================================================================================================
-class RelatedFeatures(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', verbose_name="first feature",
-                                          db_column='samplingFeatureId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, verbose_name="relationship type",
-                                           db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedFeatureId = models.ForeignKey('SamplingFeatures', verbose_name="second feature",
-                                         related_name='RelatedFeatures', db_column='relatedFeatureId',
+class Relatedfeatures(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', verbose_name="first feature",
+                                          db_column='samplingfeatureid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, verbose_name="relationship type",
+                                           db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedfeatureid = models.ForeignKey('Samplingfeatures', verbose_name="second feature",
+                                         related_name='RelatedFeatures', db_column='relatedfeatureid',
                                          on_delete=models.CASCADE)
-    spatialOffsetId = models.ForeignKey('SpatialOffsets', verbose_name="spatial offset", db_column='spatialOffsetId',
+    spatialoffsetid = models.ForeignKey('Spatialoffsets', verbose_name="spatial offset", db_column='spatialoffsetid',
                                         blank=True, null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        return u"%s - %s - %s" % (self.samplingFeatureId, self.relationshipTypeCV, self.relatedFeatureId)
+        return u"%s - %s - %s" % (
+            self.samplingfeatureid, self.relationshiptypecv, self.relatedfeatureid)
 
     class Meta:
         managed = False
-        db_table = 'RelatedFeatures'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedFeatures'
+        else:
+            db_table = r'relatedfeatures'
         verbose_name = 'relate two feature'
 
 
-# ======================================================================================================================
-# Related models table
-# ======================================================================================================================
-class RelatedModels(models.Model):
-    relatedId = models.AutoField(primary_key=True)
-    modelId = models.ForeignKey(Models, db_column='modelId', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV', on_delete=models.CASCADE)
-    relatedModelId = models.IntegerField()
+class Relatedmodels(models.Model):
+    relatedid = models.AutoField(primary_key=True)
+    modelid = models.ForeignKey(Models, db_column='modelid', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv', on_delete=models.CASCADE)
+    relatedmodelid = models.IntegerField()
 
     class Meta:
         managed = False
-        db_table = 'RelatedModels'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedModels'
+        else:
+            db_table = r'relatedmodels'
 
 
-# ======================================================================================================================
-# Related results table
-# ======================================================================================================================
-class RelatedResults(models.Model):
-    relationId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey('Results', db_column='resultId', verbose_name='data result', on_delete=models.CASCADE)
-    relationshipTypeCV = models.ForeignKey(CvRelationshipType, db_column='relationshipTypeCV',
+class Relatedresults(models.Model):
+    relationid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey('Results', db_column='resultid', verbose_name='data result', on_delete=models.CASCADE)
+    relationshiptypecv = models.ForeignKey(CvRelationshiptype, db_column='relationshiptypecv',
                                            verbose_name='relationship type', on_delete=models.CASCADE)
-    relatedResultId = models.ForeignKey('Results', related_name='relatedResult', db_column='relatedResultId',
+    relatedresultid = models.ForeignKey('Results', related_name='RelatedResult', db_column='relatedresultid',
                                         verbose_name='related data result', on_delete=models.CASCADE)
-    versionCode = models.CharField(max_length=50, blank=True, verbose_name='version code')
-    relatedResultSequenceNumber = models.IntegerField(blank=True, null=True,
+    versioncode = models.CharField(max_length=50, blank=True, verbose_name='version code')
+    relatedresultsequencenumber = models.IntegerField(blank=True, null=True,
                                                       verbose_name='related result sequence number')
 
     def __str__(self):
         return u"%s - %s - %s" % (
-            self.resultId, self.relationshipTypeCV, self.relatedResultId)
+            self.resultid, self.relationshiptypecv, self.relatedresultid)
 
     class Meta:
         managed = False
-        db_table = 'RelatedResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'RelatedResults'
+        else:
+            db_table = r'relatedresults'
         verbose_name = 'related result'
 
 
-# ======================================================================================================================
-# Related annotations table
-# ======================================================================================================================
-class ResultAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey('Results', db_column='resultId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
-    beginDateTime = models.DateTimeField()
-    endDateTime = models.DateTimeField()
+class Resultannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey('Results', db_column='resultid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
+    begindatetime = models.DateTimeField()
+    enddatetime = models.DateTimeField()
 
     class Meta:
         managed = False
-        db_table = 'ResultAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ResultAnnotations'
+        else:
+            db_table = r'resultannotations'
 
 
-# ======================================================================================================================
-# Result derivation equations table
-# ======================================================================================================================
-class ResultDerivationEquations(models.Model):
-    resultId = models.OneToOneField('Results', db_column='resultId', verbose_name='data result', primary_key=True,
+class Resultderivationequations(models.Model):
+    resultid = models.OneToOneField('Results', db_column='resultid', verbose_name='data result', primary_key=True,
                                     on_delete=models.CASCADE)
-    derivationEquationId = models.ForeignKey(DerivationEquations, db_column='derivationEquationId',
+    derivationequationid = models.ForeignKey(Derivationequations, db_column='derivationequationid',
                                              on_delete=models.CASCADE)
 
     def __str__(self):
-        return u"%s - %s" % (self.resultId, self.derivationEquationId)
+        return u"%s - %s" % (self.resultid, self.derivationequationid)
 
     class Meta:
         managed = False
-        db_table = 'ResultDerivationEquations'
-        verbose_name = 'result derivation equation'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ResultDerivationEquations'
+        else:
+            db_table = r'resultderivationequations'
+        verbose_name= 'result derivation equation'
 
 
-# ======================================================================================================================
-# Result extension property values table
-# ======================================================================================================================
-class ResultExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey('Results', db_column='resultId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey(ExtensionProperties, db_column='propertyId', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255)
+class Resultextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey('Results', db_column='resultid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey(Extensionproperties, db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255)
 
     def __str__(self):
-        return u"%s - %s: value %s" % (self.resultId, self.propertyId, self.propertyValue)
+        return u"%s - %s: value %s" % (self.resultid, self.propertyid, self.propertyvalue)
 
     class Meta:
         managed = False
-        db_table = 'ResultExtensionPropertyValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ResultExtensionPropertyValues'
+        else:
+            db_table = r'resultextensionpropertyvalues'
 
 
-# ======================================================================================================================
-# Result normalization values table
-# ======================================================================================================================
-class ResultNormalizationValues(models.Model):
-    resultId = models.OneToOneField('Results', db_column='resultId', primary_key=True, on_delete=models.CASCADE)
-    normalizedByReferenceMaterialValueId = models.ForeignKey(ReferenceMaterialValues,
-                                                             db_column='normalizedByReferenceMaterialValueId',
-                                                             on_delete=models.CASCADE)
+class Resultnormalizationvalues(models.Model):
+    resultid = models.OneToOneField('Results', db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    normalizedbyreferencematerialvalueid = models.ForeignKey(
+        Referencematerialvalues,
+        db_column='normalizedbyreferencematerialvalueid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'ResultNormalizationValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ResultNormalizationValues'
+        else:
+            db_table = r'resultnormalizationvalues'
 
 
-# ======================================================================================================================
-# Results table
-# ======================================================================================================================
+@python_2_unicode_compatible
 class Results(models.Model):
-    resultId = models.AutoField(primary_key=True, verbose_name="data result")
-    resultUUID = models.UUIDField(default=uuid.uuid4, editable=False)
-    featureActionId = models.ForeignKey(FeatureActions, related_name="feature_actions",
+    resultid = models.AutoField(primary_key=True, verbose_name="data result")
+    resultuuid = UUIDField(default=uuid.uuid4, editable=False)
+    featureactionid = models.ForeignKey(Featureactions, related_name="feature_actions",
                                         verbose_name="sampling feature action", db_column='featureactionid',
                                         on_delete=models.CASCADE)
-    resultType = models.ForeignKey(CvResultType, verbose_name='result type', db_column='resultTypeCV',
+    result_type = models.ForeignKey(CvResulttype, verbose_name='result type', db_column='resulttypecv',
+                                    on_delete=models.CASCADE)
+    variableid = models.ForeignKey('Variables', verbose_name='variable', db_column='variableid',
                                    on_delete=models.CASCADE)
-    variableId = models.ForeignKey('Variables', verbose_name='variable', db_column='variableid',
-                                   on_delete=models.CASCADE)
-    unitsId = models.ForeignKey('Units', verbose_name='units', related_name='+', db_column='unitsId',
+    unitsid = models.ForeignKey('Units', verbose_name='units', related_name='+', db_column='unitsid',
                                 on_delete=models.CASCADE)
-    taxonomicClassifierId = models.ForeignKey('TaxonomicClassifiers', verbose_name='taxonomic classifier',
-                                              db_column='taxonomicClassifierId', blank=True, null=True,
+    taxonomicclassifierid = models.ForeignKey('Taxonomicclassifiers', verbose_name='taxonomic classifier',
+                                              db_column='taxonomicclassifierid', blank=True, null=True,
                                               on_delete=models.CASCADE)
-    processing_level = models.ForeignKey(ProcessingLevels, db_column='processingLevelId', on_delete=models.CASCADE)
-    resultDateTime = models.DateTimeField(verbose_name='Start result date time', blank=True, null=True)
-    resultDateTimeUtcOffset = models.BigIntegerField(verbose_name='Start result date time UTC offset', default=4,
-                                                     null=True)
-    # validDateTime>> Date and time for which the result is valid (e.g., for a forecast result).
+    processing_level = models.ForeignKey(Processinglevels, db_column='processinglevelid', on_delete=models.CASCADE)
+    resultdatetime = models.DateTimeField(verbose_name='Start result date time', blank=True, null=True)
+    resultdatetimeutcoffset = models.BigIntegerField(
+        verbose_name='Start result date time UTC offset', default=-5, null=True)
+    # validdatetime>> Date and time for which the result is valid (e.g., for a forecast result).
     # Should probably be expressed as a duration
-    validDateTime = models.DateTimeField(verbose_name='valid date time - Date and time for which the result is valid',
+    validdatetime = models.DateTimeField(verbose_name='valid date time- Date and time for which the result is valid',
                                          blank=True, null=True)
-    validDateTimeUtcOffset = models.BigIntegerField(verbose_name='valid date time UTC offset', default=4, null=True)
-    statusCV = models.ForeignKey(CvStatus, verbose_name='status', db_column='statuscv', blank=True, null=True,
+    validdatetimeutcoffset = models.BigIntegerField(verbose_name='valid date time UTC offset', default=-5, null=True)
+    statuscv = models.ForeignKey(CvStatus, verbose_name='status', db_column='statuscv', blank=True, null=True,
                                  on_delete=models.CASCADE)
-    sampledMediumCV = models.ForeignKey(CvMedium, verbose_name='sampled medium', db_column='sampledmediumcv',
+    sampledmediumcv = models.ForeignKey(CvMedium, verbose_name='sampled medium', db_column='sampledmediumcv',
                                         blank=True, null=True, on_delete=models.CASCADE)
-    valueCount = models.IntegerField(verbose_name='number of recorded values')
+    valuecount = models.IntegerField(verbose_name='number of recorded values')
 
     @staticmethod
-    def csv_header():
-        s = 'databaseId,'
+    def csvheader():
+        s = 'databaseid,'
         s += 'Date and Time,'
         s += 'sampling feature/location,'
         s += 'time aggregation interval,'
         s += 'time aggregation unit,'
-
         return s
 
     def email_text(self):
-        s = '{0} -unit-{1}-processing level-{2} '.format(self.variableId.variableCode, self.unitsId.unitsName,
-                                                         self.processing_level.processingLevelCode)
+        s = '{0} -unit-{1}-processing level-{2} '.format(self.variableid.variablecode, self.unitsid.unitsname,
+                                                         self.processing_level.processinglevelcode)
         return s
 
-    def csv_header_short(self):
-        s = '\" {0} -unit-{1}-processing level-{2}\",'.format(self.variableId.variableCode,
-                                                              self.unitsId.unitsAbbreviation,
-                                                              self.processing_level.processingLevelCode)
+    def csvheaderShort(self):
+        s = '\" {0} -unit-{1}-processing level-{2}\",'.format(self.variableid.variablecode,
+                                                              self.unitsid.unitsabbreviation,
+                                                              self.processing_level.processinglevelcode)
         return s
 
     def __str__(self):
-        return "%s - %s - ID: %s" % (self.variableId, self.featureActionId, self.resultId)
+        return "%s - %s - ID: %s" % (self.variableid, self.featureactionid, self.resultid)
 
     class Meta:
         managed = False
-        db_table = 'Results'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Results'
+        else:
+            db_table = r'results'
         verbose_name = 'data result'
-        ordering = ["variableId"]
+        ordering = ["variableid"]
 
 
-# ======================================================================================================================
-# Results quality table
-# ======================================================================================================================
-class ResultsDataQuality(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(Results, db_column='resultid', verbose_name='result', on_delete=models.CASCADE)
-    dataQualityId = models.ForeignKey(DataQuality, db_column='dataqualityid', verbose_name='data quality',
+class Resultsdataquality(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Results, db_column='resultid', verbose_name='result', on_delete=models.CASCADE)
+    dataqualityid = models.ForeignKey(Dataquality, db_column='dataqualityid', verbose_name='data quality',
                                       on_delete=models.CASCADE)
 
     def __str__(self):
-        return u"%s - %s" % (self.resultId, self.dataQualityId)
+        return u"%s - %s" % (self.resultid, self.dataqualityid)
 
     class Meta:
         managed = False
-        db_table = 'ResultsDataQuality'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'ResultsDataQuality'
+        else:
+            db_table = r'resultsdataquality'
         verbose_name = 'results data quality'
         verbose_name_plural = 'results data quality'
 
 
-# ======================================================================================================================
-# Sampling feature annotations table
-# ======================================================================================================================
-class SamplingFeatureAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Samplingfeatureannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', db_column='samplingfeatureid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.samplingFeatureId
-        if self.annotationId:
-            s += u"- %s" % self.annotationId
+        s = u"%s" % self.samplingfeatureid
+        if self.annotationid:
+            s += u"- %s" % self.annotationid
         return s
 
     class Meta:
         managed = False
-        db_table = 'SamplingFeatureAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SamplingFeatureAnnotations'
+        else:
+            db_table = r'samplingfeatureannotations'
 
 
-# ======================================================================================================================
-# Sampling feature extension property values table
-# ======================================================================================================================
-class SamplingFeatureExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey(ExtensionProperties, db_column='propertyid', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255)
+class Samplingfeatureextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', db_column='samplingfeatureid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey(Extensionproperties, db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255)
 
     def __str__(self):
-        s = u"%s" % self.samplingFeatureId
-        if self.propertyValue:
+        s = u"%s" % self.samplingfeatureid
+        if self.propertyvalue:
             s += u"- %s - %s%s" % (
-            self.propertyId.propertyName, self.propertyValue, self.propertyId.propertyUnitsId.unitsabbreviation)
+                self.propertyid.propertyname, self.propertyvalue, self.propertyid.propertyunitsid.unitsabbreviation)
         return s
 
     class Meta:
         managed = False
-        db_table = 'SamplingFeatureExtensionPropertyValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SamplingFeatureExtensionPropertyValues'
+        else:
+            db_table = r'samplingfeatureextensionpropertyvalues'
 
 
-# ======================================================================================================================
-# Sampling feature extension property values table
-# ======================================================================================================================
-class SamplingFeatureExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    samplingFeatureId = models.ForeignKey('SamplingFeatures', db_column='samplingFeatureId', on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+class Samplingfeatureexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    samplingfeatureid = models.ForeignKey('Samplingfeatures', db_column='samplingfeatureid', on_delete=models.CASCADE)
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    samplingFeatureExternalIdentifier = models.CharField(max_length=255)
-    samplingFeatureExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    samplingfeatureexternalidentifier = models.CharField(max_length=255)
+    samplingfeatureexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         s = u"%s - %s - %s - %s" % (
-            self.samplingFeatureId, self.externalIdentifierSystemId,
-            self.samplingFeatureExternalIdentifier,
-            self.samplingFeatureExternalIdentifierURI)
+            self.samplingfeatureid, self.externalidentifiersystemid,
+            self.samplingfeatureexternalidentifier,
+            self.samplingfeatureexternalidentifieruri)
         return s
 
     class Meta:
         managed = False
-        db_table = 'SamplingFeatureExternalIdentifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SamplingFeatureExternalIdentifiers'
+        else:
+            db_table = r'samplingfeatureexternalidentifiers'
 
 
-# ======================================================================================================================
-# Sampling features table
-# ======================================================================================================================
-class SamplingFeatures(models.Model):
-    samplingFeatureId = models.AutoField(primary_key=True)
-    samplingFeatureUUID = models.UUIDField(default=uuid.uuid4, editable=False)
-    samplingFeatureType = models.ForeignKey(CvSamplingFeatureType, db_column='samplingFeatureTypeCV',
-                                            on_delete=models.CASCADE)
-    samplingFeatureCode = models.CharField(verbose_name='sampling feature or location code', max_length=50)
-    samplingFeatureName = models.CharField(verbose_name='sampling feature or location name', max_length=255, blank=True,
-                                           null=True)
-    samplingFeatureDescription = models.CharField(verbose_name='sampling feature or location description',
+class Samplingfeatures(models.Model):
+    samplingfeatureid = models.AutoField(primary_key=True)
+    samplingfeatureuuid = UUIDField(default=uuid.uuid4, editable=False)
+    sampling_feature_type = models.ForeignKey(CvSamplingfeaturetype, db_column='samplingfeaturetypecv',
+                                              on_delete=models.CASCADE)
+    samplingfeaturecode = models.CharField(verbose_name='sampling feature or location code', max_length=50)
+    samplingfeaturename = models.CharField(verbose_name='sampling feature or location name', max_length=255,
+                                           blank=True, null=True)
+    samplingfeaturedescription = models.CharField(verbose_name='sampling feature or location description',
                                                   max_length=5000, blank=True)
-    samplingFeatureGeoType = models.ForeignKey(CvSamplingFeatureGeoType, db_column='samplingFeatureGeoTypeCV',
-                                               default="Point", null=True, on_delete=models.CASCADE)
-    featureGeometry = models.TextField(verbose_name='feature geometry', blank=True, null=True)
+    sampling_feature_geo_type = models.ForeignKey(CvSamplingfeaturegeotype, db_column='samplingfeaturegeotypecv',
+                                                  default="Point", null=True, on_delete=models.CASCADE)
+    featuregeometry = models.TextField(verbose_name='feature geometry', blank=True, null=True)
     elevation_m = models.FloatField(verbose_name='elevation', blank=True, null=True)
-    elevationDatumCV = models.ForeignKey(CvElevationDatum, db_column='elevationDatumCV', blank=True, null=True,
-                                         on_delete=models.CASCADE)
+    elevation_datum = models.ForeignKey(CvElevationdatum, db_column='elevationdatumcv', blank=True, null=True,
+                                        on_delete=models.CASCADE)
+
     objects = GeoManager()
 
-    def feature_geometry_wkt(self):
-        return GEOSGeometry(self.featureGeometry)
+    def featuregeometrywkt(self):
+        return GEOSGeometry(self.featuregeometry)
 
     def __str__(self):
         s = u"%s - %s- %s" % (
-            self.samplingFeatureCode, self.samplingFeatureId, self.samplingFeatureType)
-        if self.samplingFeatureName:
-            s += u" - %s" % self.samplingFeatureName
+            self.samplingfeaturecode, self.samplingfeatureid, self.sampling_feature_type)
+        if self.samplingfeaturename:
+            s += u" - %s" % self.samplingfeaturename
         return s
 
     class Meta:
         managed = False
-        db_table = 'SamplingFeatures'
-        ordering = ('samplingFeatureType', 'samplingFeatureName',)
+        _exportdb = settings.EXPORTDB
+        print(_exportdb)
+        if _exportdb:
+            db_table = r'SamplingFeatures'
+        else:
+            db_table = r'samplingfeatures'
+        ordering = ('sampling_feature_type', 'samplingfeaturename',)
         verbose_name = 'sampling feature (location)'
 
 
-# ======================================================================================================================
-# Sampling results table
-# ======================================================================================================================
-class SectionResults(models.Model):
-    resultId = models.OneToOneField(Results, db_column='resultId', primary_key=True, on_delete=models.CASCADE)
-    yLocation = models.FloatField(blank=True, null=True)
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId', blank=True, null=True,
+class Sectionresults(models.Model):
+    resultid = models.OneToOneField(Results, db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    ylocation = models.FloatField(blank=True, null=True)
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', db_column='spatialReferenceId', blank=True, null=True,
+    spatialreferenceid = models.ForeignKey('Spatialreferences', db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedXSpacing = models.FloatField(blank=True, null=True)
-    intendedXSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedXSpacingUnitsId',
+    intendedxspacing = models.FloatField(blank=True, null=True)
+    intendedxspacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedxspacingunitsid',
                                                 blank=True, null=True, on_delete=models.CASCADE)
-    intendedZSpacing = models.FloatField(blank=True, null=True)
-    intendedZSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedZSpacingUnitsId',
+    intendedzspacing = models.FloatField(blank=True, null=True)
+    intendedzspacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedzspacingunitsid',
                                                 blank=True, null=True, on_delete=models.CASCADE)
-    intendedTimeSpacing = models.FloatField(blank=True, null=True)
-    intendedTimeSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedTimeSpacingUnitsId',
+    intendedtimespacing = models.FloatField(blank=True, null=True)
+    intendedtimespacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedtimespacingunitsid',
                                                    blank=True, null=True, on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SectionResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SectionResults'
+        else:
+            db_table = r'sectionresults'
 
 
-# ======================================================================================================================
-# Sampling results table
-# ======================================================================================================================
-class SectionResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('SectionResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Sectionresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Sectionresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SectionResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SectionResultValueAnnotations'
+        else:
+            db_table = r'sectionresultvalueannotations'
 
 
-# ======================================================================================================================
-# Section result values table
-# ======================================================================================================================
-class SectionResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(SectionResults, db_column='resultid', on_delete=models.CASCADE)
-    dataValue = models.FloatField()
-    valueDateTime = models.BigIntegerField()
-    valueDateTimeUtcOffset = models.BigIntegerField()
-    xLocation = models.FloatField()
-    xAggregationInterval = models.FloatField()
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId',
+class Sectionresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Sectionresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField()
+    valuedatetime = models.BigIntegerField()
+    valuedatetimeutcoffset = models.BigIntegerField()
+    xlocation = models.FloatField()
+    xaggregationinterval = models.FloatField()
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid',
                                          on_delete=models.CASCADE)
-    zLocation = models.BigIntegerField()
-    zAggregationInterval = models.FloatField()
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId',
+    zlocation = models.BigIntegerField()
+    zaggregationinterval = models.FloatField()
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid',
                                          on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField()
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+',
-                                                       db_column='timeAggregationIntervalUnitsId',
+    timeaggregationinterval = models.FloatField()
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+',
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SectionResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SectionResultValues'
+        else:
+            db_table = r'sectionresultvalues'
 
 
-# ======================================================================================================================
-# Simulations table
-# ======================================================================================================================
 class Simulations(models.Model):
-    simulationId = models.AutoField(primary_key=True)
-    actionId = models.ForeignKey(Actions, db_column='actionId', on_delete=models.CASCADE)
-    simulationName = models.CharField(max_length=255)
-    simulationDescription = models.CharField(max_length=5000, blank=True)
-    simulationStartDateTime = models.DateTimeField()
-    simulationStartDateTimeUtcOffset = models.IntegerField()
-    simulationEndDateTime = models.DateTimeField()
-    simulationEndDateTimeUtcOffset = models.IntegerField()
-    timeStepValue = models.FloatField()
-    timeStepUnitsId = models.IntegerField()
-    inputDatasetId = models.IntegerField(blank=True, null=True)
-    modelId = models.ForeignKey(Models, db_column='modelId', on_delete=models.CASCADE)
+    simulationid = models.AutoField(primary_key=True)
+    actionid = models.ForeignKey(Actions, db_column='actionid', on_delete=models.CASCADE)
+    simulationname = models.CharField(max_length=255)
+    simulationdescription = models.CharField(max_length=5000, blank=True)
+    simulationstartdatetime = models.DateTimeField()
+    simulationstartdatetimeutcoffset = models.IntegerField()
+    simulationenddatetime = models.DateTimeField()
+    simulationenddatetimeutcoffset = models.IntegerField()
+    timestepvalue = models.FloatField()
+    timestepunitsid = models.IntegerField()
+    inputdatasetid = models.IntegerField(blank=True, null=True)
+    modelid = models.ForeignKey(Models, db_column='modelid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'Simulations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Simulations'
+        else:
+            db_table = r'simulations'
 
 
-# ======================================================================================================================
-# Sites table
-# ======================================================================================================================
 class Sites(models.Model):
-    samplingFeatureId = models.OneToOneField(SamplingFeatures, db_column='samplingFeatureId', primary_key=True,
+    samplingfeatureid = models.OneToOneField(Samplingfeatures, db_column='samplingfeatureid', primary_key=True,
                                              verbose_name='sampling feature', on_delete=models.CASCADE)
-    siteTypeCV = models.ForeignKey(CvSiteType, db_column='siteTypeCV', on_delete=models.CASCADE)
+    sitetypecv = models.ForeignKey(CvSitetype, db_column='sitetypecv', on_delete=models.CASCADE)
     latitude = models.FloatField()
     longitude = models.FloatField()
-    spatialReferenceId = models.ForeignKey('SpatialReferences', verbose_name='spatial reference id',
-                                           db_column='spatialReferenceId', on_delete=models.CASCADE)
+    spatialreferenceid = models.ForeignKey('Spatialreferences', verbose_name='spatial reference id',
+                                           db_column='spatialreferenceid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
         verbose_name = 'Site'
-        db_table = 'Sites'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Sites'
+        else:
+            db_table = r'sites'
 
     def __str__(self):
-        s = u"%s" % self.samplingFeatureId
-        s += u"- %s" % self.siteTypeCV
+        s = u"%s" % self.samplingfeatureid
+        s += u"- %s" % self.sitetypecv
         return s
 
 
-# ======================================================================================================================
-# Spatial offsets table
-# ======================================================================================================================
-class SpatialOffsets(models.Model):
-    spatialOffsetId = models.AutoField(primary_key=True)
-    spatialOffsetTypeCV = models.ForeignKey(CvSpatialOffsetType, db_column='spatialOffsetTypeCV',
+class Spatialoffsets(models.Model):
+    spatialoffsetid = models.AutoField(primary_key=True)
+    spatialoffsettypecv = models.ForeignKey(CvSpatialoffsettype, db_column='spatialoffsettypecv',
                                             on_delete=models.CASCADE)
-    offset1Value = models.FloatField()
-    offset1UnitId = models.ForeignKey('Units', related_name='+', db_column='offset1UnitId', on_delete=models.CASCADE)
-    offset2Value = models.FloatField(blank=True, null=True)
-    offset2UnitId = models.ForeignKey('Units', related_name='+', db_column='offset2UnitId', blank=True, null=True,
+    offset1value = models.FloatField()
+    offset1unitid = models.ForeignKey('Units', related_name='+', db_column='offset1unitid', on_delete=models.CASCADE)
+    offset2value = models.FloatField(blank=True, null=True)
+    offset2unitid = models.ForeignKey('Units', related_name='+', db_column='offset2unitid', blank=True, null=True,
                                       on_delete=models.CASCADE)
-    offset3Value = models.FloatField(blank=True, null=True)
-    offset3UnitId = models.ForeignKey('Units', related_name='+', db_column='offset3UnitId', blank=True, null=True,
+    offset3value = models.FloatField(blank=True, null=True)
+    offset3unitid = models.ForeignKey('Units', related_name='+', db_column='offset3unitid', blank=True, null=True,
                                       on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SpatialOffsets'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpatialOffsets'
+        else:
+            db_table = r'spatialoffsets'
 
 
-# ======================================================================================================================
-# Spatial reference external identifiers table
-# ======================================================================================================================
-class SpatialReferenceExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    spatialReferenceId = models.ForeignKey('SpatialReferences', db_column='spatialReferenceId',
+class Spatialreferenceexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    spatialreferenceid = models.ForeignKey('Spatialreferences', db_column='spatialreferenceid',
                                            on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    spatialReferenceExternalIdentifier = models.CharField(max_length=255)
-    spatialReferenceExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    spatialreferenceexternalidentifier = models.CharField(max_length=255)
+    spatialreferenceexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'SpatialReferenceExternalIdentifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpatialReferenceExternalIdentifiers'
+        else:
+            db_table = r'spatialreferenceexternalidentifiers'
 
 
-# ======================================================================================================================
-# Spatial references table
-# ======================================================================================================================
-class SpatialReferences(models.Model):
-    spatialReferenceId = models.AutoField(primary_key=True, verbose_name='spatial reference id')
-    SRSCode = models.CharField(max_length=50, blank=True, verbose_name='spatial reference code')
-    SRSName = models.CharField(max_length=255, verbose_name='spatial reference name')
-    SRSDescription = models.CharField(max_length=5000, blank=True, verbose_name='spatial reference description')
-    SRSLink = models.CharField(max_length=255, blank=True, verbose_name='spatial reference link')
+class Spatialreferences(models.Model):
+    spatialreferenceid = models.AutoField(primary_key=True, verbose_name='spatial reference id')
+    srscode = models.CharField(max_length=50, blank=True, verbose_name='spatial reference code')
+    srsname = models.CharField(max_length=255, verbose_name='spatial reference name')
+    srsdescription = models.CharField(max_length=5000, blank=True, verbose_name='spatial reference description')
+    srslink = models.CharField(max_length=255, blank=True, verbose_name='spatial reference link')
 
     class Meta:
         managed = False
         verbose_name = 'Spatial reference'
-        db_table = 'SpatialReferences'
-
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpatialReferences'
+        else:
+            db_table = r'spatialreferences'
 
     def __str__(self):
-        if self.SRSCode:
-            s = u"%s" % self.SRSCode
-        s += u"- %s" % self.SRSName
+        if self.srscode:
+            s = u"%s" % self.srscode
+        s += u"- %s" % self.srsname
         return s
 
 
-# ======================================================================================================================
-# Spatial reference external identifiers table
-# ======================================================================================================================
-class SpecimenBatchPositions(models.Model):
-    featureActionId = models.OneToOneField(FeatureActions, db_column='featureActionId', primary_key=True,
+class Specimenbatchpostions(models.Model):
+    featureactionid = models.OneToOneField(Featureactions, db_column='featureactionid', primary_key=True,
                                            on_delete=models.CASCADE)
-    batchPositionNumber = models.IntegerField()
-    batchPositionLabel = models.CharField(max_length=255, blank=True)
+    batchpositionnumber = models.IntegerField()
+    batchpositionlabel = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'SpecimenBatchPositions'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpecimenBatchPostions'
+        else:
+            db_table = r'specimenbatchpostions'
 
 
-# ======================================================================================================================
-# Specimens table
-# ======================================================================================================================
 class Specimens(models.Model):
-    samplingFeatureId = models.OneToOneField(SamplingFeatures, db_column='samplingFeatureId', primary_key=True,
+    samplingfeatureid = models.OneToOneField(Samplingfeatures, db_column='samplingfeatureid', primary_key=True,
                                              on_delete=models.CASCADE)
-    specimenTypeCV = models.ForeignKey(CvSpecimenType, db_column='specimenTypeCV', on_delete=models.CASCADE)
-    specimenMediumCV = models.ForeignKey(CvSpecimenMedium, db_column='specimenMediumCV', on_delete=models.CASCADE)
-    isFieldSpecimen = models.BooleanField()
+    specimentypecv = models.ForeignKey(CvSpecimentype, db_column='specimentypecv', on_delete=models.CASCADE)
+    specimenmediumcv = models.ForeignKey(CvSpecimenmedium, db_column='specimenmediumcv', on_delete=models.CASCADE)
+    isfieldspecimen = models.BooleanField()
 
     def __unicode__(self):
-        return u'{specTypeCV} - {specMedCV}'.format(spectypecv=self.specimenTypeCV, specmedcv=self.specimenMediumCV)
+        return u'{spectypecv} - {specmedcv}'.format(spectypecv=self.specimentypecv, specmedcv=self.specimenmediumcv)
 
     class Meta:
         managed = False
-        db_table = 'Specimens'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Specimens'
+        else:
+            db_table = r'specimens'
         verbose_name = 'Specimen'
 
 
-# ======================================================================================================================
-# Specimen taxonomic classifiers table
-# ======================================================================================================================
-class SpecimenTaxonomicClassifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    samplingFeatureId = models.ForeignKey(Specimens, db_column='samplingFeatureId', on_delete=models.CASCADE)
-    taxonomicClassifierId = models.ForeignKey('TaxonomicClassifiers', db_column='taxonomicClassifierId',
+class Specimentaxonomicclassifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    samplingfeatureid = models.ForeignKey(Specimens, db_column='samplingfeatureid', on_delete=models.CASCADE)
+    taxonomicclassifierid = models.ForeignKey('Taxonomicclassifiers', db_column='taxonomicclassifierid',
                                               on_delete=models.CASCADE)
-    citationId = models.ForeignKey(Citations, db_column='citationId', blank=True, null=True, on_delete=models.CASCADE)
+    citationid = models.ForeignKey(Citations, db_column='citationid', blank=True, null=True, on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SpecimenTaxonomicClassifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpecimenTaxonomicClassifiers'
+        else:
+            db_table = r'specimentaxonomicclassifiers'
 
 
-# ======================================================================================================================
-# Spectra results table
-# ======================================================================================================================
-class SpectraResults(models.Model):
-    resultId = models.OneToOneField(Results, db_column='resultId', primary_key=True, on_delete=models.CASCADE)
-    xLocation = models.FloatField(blank=True, null=True)
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId', blank=True, null=True,
+class Spectraresults(models.Model):
+    resultid = models.OneToOneField(Results, db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    xlocation = models.FloatField(blank=True, null=True)
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    yLocation = models.FloatField(blank=True, null=True)
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId', blank=True, null=True,
+    ylocation = models.FloatField(blank=True, null=True)
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    zLocation = models.FloatField(blank=True, null=True)
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId', blank=True, null=True,
+    zlocation = models.FloatField(blank=True, null=True)
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey(SpatialReferences, db_column='spatialReferenceId', blank=True, null=True,
+    spatialreferenceid = models.ForeignKey(Spatialreferences, db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedWaveLengthSpacing = models.FloatField(blank=True, null=True)
-    intendedWavelengthSpacingUnitsId = models.ForeignKey('Units', related_name='+',
-                                                         db_column='intendedWaveLengthSpacingUnitsId', blank=True,
+    intendedwavelengthspacing = models.FloatField(blank=True, null=True)
+    intendedwavelengthspacingunitsid = models.ForeignKey('Units', related_name='+',
+                                                         db_column='intendedwavelengthspacingunitsid', blank=True,
                                                          null=True, on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SpectraResults'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpectraResults'
+        else:
+            db_table = r'spectraresults'
 
 
-# ======================================================================================================================
-# Spectra result value annotations table
-# ======================================================================================================================
-class SpectraResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('SpectraResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Spectraresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Spectraresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SpectraResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpectraResultValueAnnotations'
+        else:
+            db_table = r'spectraresultvalueannotations'
 
 
-# ======================================================================================================================
-# Spectra result values table
-# ======================================================================================================================
-class SpectraResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(SpectraResults, db_column='resultId', on_delete=models.CASCADE)
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    excitationWaveLength = models.FloatField()
-    emissionVaveLength = models.FloatField()
-    waveLengthUnitsId = models.ForeignKey('Units', related_name='+', db_column='waveLengthUnitsId',
+class Spectraresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Spectraresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    excitationwavelength = models.FloatField()
+    emissionwavelength = models.FloatField()
+    wavelengthunitsid = models.ForeignKey('Units', related_name='+', db_column='wavelengthunitsid',
                                           on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField()
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+',
-                                                       db_column='timeAggregationIntervalUnitsId',
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
+    timeaggregationinterval = models.FloatField()
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+',
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'SpectraResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'SpectraResultValues'
+        else:
+            db_table = r'spectraresultvalues'
 
 
-# ======================================================================================================================
-# Taxonomic classifier external identifiers table
-# ======================================================================================================================
-class TaxonomicClassifierExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    taxonomicClassifierId = models.ForeignKey('TaxonomicClassifiers', db_column='taxonomicClassifierId',
+class Taxonomicclassifierexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    taxonomicclassifierid = models.ForeignKey('Taxonomicclassifiers', db_column='taxonomicclassifierid',
                                               on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    taxonomicClassifierExternalIdentifier = models.CharField(max_length=255)
-    taxonomicClassifierExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    taxonomicclassifierexternalidentifier = models.CharField(max_length=255)
+    taxonomicclassifierexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'TaxonomicClassifierExternalIdentifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TaxonomicClassifierExternalIdentifiers'
+        else:
+            db_table = r'taxonomicclassifierexternalidentifiers'
+
+            # I needed to add a sequence and set it as the default for the primary
+            #  key to make the Taxonomic Classifiers class work
+            # this is the SQL
+
+            # CREATE SEQUENCE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
+            #   INCREMENT 1
+            #   MINVALUE 2
+            #   MAXVALUE 9223372036854775807
+            #   START 3
+            #   CACHE 1;
+            # ALTER TABLE odm2.taxonomicclassifiers_taxonomicclassifiersid_seq
+            #   OWNER TO postgres;
+
+            # ALTER TABLE odm2.taxonomicclassifiers
+            #  ALTER COLUMN taxonomicclassifierid SET DEFAULT nextval
+            # ('odm2.taxonomicclassifiers_taxonomicclassifiersid_seq'::regclass);
 
 
-# I needed to add a sequence and set it as the default for the primary
-# key to make the Taxonomic Classifiers class work
-# this is the SQL
-
-# CREATE SEQUENCE taxonomicclassifiers_taxonomicclassifiersid_seq
-#   INCREMENT 1
-#   MINVALUE 2
-#   MAXVALUE 9223372036854775807
-#   START 3
-#   CACHE 1;
-# ALTER TABLE taxonomicclassifiers_taxonomicclassifiersid_seq
-#   OWNER TO postgres;
-
-# ALTER TABLE taxonomicclassifiers
-#  ALTER COLUMN taxonomicclassifierid SET DEFAULT nextval
-# ('taxonomicclassifiers_taxonomicclassifiersid_seq'::regclass);
-
-
-# ======================================================================================================================
-# Taxonomic classifiers table
-# ======================================================================================================================
-class TaxonomicClassifiers(models.Model):
-    taxonomicClassifierId = models.AutoField(primary_key=True)
-    taxonomicClassifierType = models.ForeignKey(CvTaxonomicClassifierType, db_column='taxonomicClassifierTypeCV',
-                                                help_text="A vocabulary for describing types of taxonomies from which "
-                                                          "descriptive terms used "
-                                                          "in an ODM2 database have been drawn. "
-                                                          "Taxonomic classifiers provide a way to classify"
-                                                          " Results and Specimens according to terms from a formal "
-                                                          "taxonomy.. Check http://vocabulary.org/"
-                                                          "taxonomicclassifierType/ for more info",
-                                                on_delete=models.CASCADE)
-    taxonomicClassifierName = models.CharField(verbose_name='taxonomic classifier name', max_length=255)
-    taxonomicClassifierCommonName = models.CharField(verbose_name='taxonomic classifier common name', max_length=255,
-                                                     blank=True)
-    taxonomicClassifierDescription = models.CharField(verbose_name='taxonomic classifier description', max_length=5000,
+class Taxonomicclassifiers(models.Model):
+    taxonomicclassifierid = models.AutoField(primary_key=True)
+    taxonomic_classifier_type = models.ForeignKey(CvTaxonomicclassifiertype,
+                                                  db_column='taxonomicclassifiertypecv',
+                                                  help_text="A vocabulary for describing "
+                                                            "types of taxonomies from which "
+                                                            "descriptive terms used "
+                                                            "in an ODM2 database have been drawn. "
+                                                            "Taxonomic classifiers provide "
+                                                            "a way to classify"
+                                                            " Results and Specimens "
+                                                            "according to terms from a formal "
+                                                            "taxonomy.. Check "
+                                                            "http://vocabulary.odm2.org/"
+                                                            "taxonomicclassifiertype/  "
+                                                            "for more info",
+                                                  on_delete=models.CASCADE)
+    taxonomicclassifiername = models.CharField(verbose_name='taxonomic classifier name', max_length=255)
+    taxonomicclassifiercommonname = models.CharField( verbose_name='taxonomic classifier common name', max_length=255,
                                                       blank=True)
-    parentTaxonomicClassifier = models.ForeignKey('self', db_column='parentTaxonomicClassifierId', blank=True,
-                                                  null=True, on_delete=models.CASCADE)
+    taxonomicclassifierdescription = models.CharField(verbose_name='taxonomic classifier description', max_length=5000,
+                                                      blank=True)
+    parent_taxonomic_classifier = models.ForeignKey('self', db_column='parenttaxonomicclassifierid', blank=True,
+                                                    null=True, on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s" % self.taxonomicClassifierName
-        if self.taxonomicClassifierCommonName:
-            s += u"- %s" % self.taxonomicClassifierCommonName
+        s = u"%s" % self.taxonomicclassifiername
+        if self.taxonomicclassifiercommonname:
+            s += u"- %s" % self.taxonomicclassifiercommonname
         return s
 
     class Meta:
         managed = False
-        db_table = 'TaxonomicClassifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TaxonomicClassifiers'
+        else:
+            db_table = r'taxonomicclassifiers'
         verbose_name = 'taxonomic classifier'
 
 
-class TimeSeriesResults(models.Model):
-    resultId = models.OneToOneField(Results, verbose_name="Result Series", db_column='resultid',
-                                    primary_key=True,
+class Timeseriesresults(models.Model):
+    resultid = models.OneToOneField(Results, verbose_name="Result Series", db_column='resultid', primary_key=True,
                                     on_delete=models.CASCADE)
-    xLocation = models.FloatField(blank=True, null=True, verbose_name="x location")
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId', blank=True, null=True,
+    xlocation = models.FloatField(blank=True, null=True, verbose_name="x location")
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid', blank=True, null=True,
                                          verbose_name="x location units", on_delete=models.CASCADE)
-    yLocation = models.FloatField(blank=True, null=True, verbose_name="y location")
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId',
+    ylocation = models.FloatField(blank=True, null=True, verbose_name="y location")
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid',
                                          verbose_name="y location units", blank=True, null=True,
                                          on_delete=models.CASCADE)
-    zLocation = models.FloatField(blank=True, null=True, verbose_name="z location")
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId',
+    zlocation = models.FloatField(blank=True, null=True, verbose_name="z location")
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid',
                                          verbose_name="z location units", blank=True, null=True,
                                          on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey(SpatialReferences, db_column='spatialreferenceid',
+    spatialreferenceid = models.ForeignKey(Spatialreferences, db_column='spatialreferenceid',
                                            verbose_name="spatial reference", blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedTimeSpacing = models.FloatField(blank=True, null=True, verbose_name="Intended time spacing",
+    intendedtimespacing = models.FloatField(blank=True, null=True, verbose_name="Intended time spacing",
                                             help_text="time between measurements")
-    intendedTimeSpacingUnitsId = models.ForeignKey('Units', related_name='+',
+    intendedtimespacingunitsid = models.ForeignKey('Units', related_name='+',
                                                    help_text="Units of time between measurements. This defines the time"
                                                              " series 1 hour, or 15 minutes for example.",
                                                    verbose_name="Time Units",
-                                                   db_column='intendedTimeSpacingUnitsId',
-                                                   blank=True, null=True,
+                                                   db_column='intendedtimespacingunitsid', blank=True, null=True,
                                                    on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u", %s" % self.intendedTimeSpacing
-        s += u", %s" % self.intendedTimeSpacingUnitsId
+        s = u"%s " % self.resultid
+        s += u", %s" % self.intendedtimespacing
+        s += u", %s" % self.intendedtimespacingunitsid
         return s
 
     class Meta:
         managed = False
-        db_table = 'TimeSeriesResults'
-        ordering = ['resultId']
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TimeSeriesResults'
+        else:
+            db_table = r'timeseriesresults'
+        ordering = ['resultid']
         verbose_name = 'time series result'
 
 
-# ======================================================================================================================
-# Time series result value annotations table
-# ======================================================================================================================
-class TimeSeriesResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('TimeSeriesResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Timeseriesresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Timeseriesresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TimeSeriesResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TimeSeriesResultValueAnnotations'
+        else:
+            db_table = r'timeseriesresultvalueannotations'
 
 
-# ======================================================================================================================
-# Time series result values table
-# ======================================================================================================================
-class TimeSeriesResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(TimeSeriesResults, db_column='resultId', on_delete=models.CASCADE)
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField(verbose_name="Time Interval")
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+', verbose_name="Time Units",
-                                                       db_column='timeAggregationIntervalUnitsId',
+class Timeseriesresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Timeseriesresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
+    timeaggregationinterval = models.FloatField(verbose_name="Time Interval")
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+', verbose_name="Time Units",
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u"- %s" % self.dataValue
-        s += u"- %s" % self.qualityCodeCV
-        s += u"- %s" % self.valueDateTime
+        s = u"%s " % self.resultid
+        s += u"- %s" % self.datavalue
+        s += u"- %s" % self.qualitycodecv
+        s += u"- %s" % self.valuedatetime
         return s
 
     @staticmethod
-    def csv_header():
-        s = 'databaseId,'
+    def csvheader():
+        s = 'databaseid,'
         s += 'Date and Time,'
         s += 'sampling feature/location,'
         s += 'citation,'
+
         return s
 
-    def csv_output(self):
-        s = str(self.valueId)
-        s += ', {0}'.format(self.valueDateTime)
-        s += ',\" {0}\"'.format(self.resultId.resultId.featureActionId.samplingFeatureId.samplingFeatureName)
+    def csvoutput(self):
+        s = str(self.valueid)
+        s += ', {0}'.format(self.valuedatetime)
+        s += ',\" {0}\"'.format(self.resultid.resultid.featureactionid.samplingfeatureid.samplingfeaturename)
         s = build_citation(s, self)
         return s
 
     def email_text(self):
-        s = '{0} -unit-{1}-processing level-{2} '.format(self.resultId.resultId.variableId.variableCode,
-                                                         self.resultId.resultId.unitsId.unitsName,
-                                                         self.resultId.resultId.processing_level.processingLevelCode)
+        s = '{0} -unit-{1}-processing level-{2} '.format(self.resultid.resultid.variableid.variablecode,
+                                                         self.resultid.resultid.unitsid.unitsname,
+                                                         self.resultid.resultid.processing_level.processinglevelcode)
         return s
 
-    def csv_header_short(self):
+    def csvheaderShort(self):
+        # s = 'method,'
         s = '\" {0} -unit-{1}-processing level-{2}\",'.format(
-            self.resultId.resultId.variableId.variableCode,
-            self.resultId.resultId.unitsId.unitsName,
-            self.resultId.resultId.processing_level.processingLevelCode)
+            self.resultid.resultid.variableid.variablecode,
+            self.resultid.resultid.unitsid.unitsname,
+            self.resultid.resultid.processing_level.processinglevelcode)
         s += 'quality code,'
         s += 'annotation,'
         return s
 
-    def csv_output_short(self):
-        s = '{0},'.format(self.dataValue)
-        s += '{0}'.format(self.qualityCodeCV)
-        trv_annotation = TimeSeriesResultValueAnnotations.objects.filter(valueid=self.valueId)
-        annotations = Annotations.objects.filter(annotationid__in=trv_annotation)
+    def csvoutputShort(self):
+        s = '{0},'.format(self.datavalue)
+        s += '{0}'.format(self.qualitycodecv)
+        trvannotation = Timeseriesresultvalueannotations.objects.filter(valueid=self.valueid)
+        annotations = Annotations.objects.filter(annotationid__in=trvannotation)
         s += ',\"'
         for anno in annotations:
             s += '{0} '.format(anno)
@@ -2964,380 +3182,392 @@ class TimeSeriesResultValues(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'TimeSeriesResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TimeSeriesResultValues'
+        else:
+            db_table = r'timeseriesresultvalues'
         verbose_name = 'time series result value'
 
 
-# ======================================================================================================================
-# Time series result values extra table
-# ======================================================================================================================
-class TimeSeriesResultValuesExt(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(TimeSeriesResults, db_column='resultId', on_delete=models.DO_NOTHING)
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.DO_NOTHING)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.DO_NOTHING)
-    timeAggregationInterval = models.FloatField(verbose_name="Time Interval")
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+', verbose_name="Time Units",
-                                                       db_column='timeAggregationIntervalUnitsId',
+class Timeseriesresultvaluesext(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Timeseriesresults, db_column='resultid', on_delete=models.DO_NOTHING)
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.DO_NOTHING)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.DO_NOTHING)
+    timeaggregationinterval = models.FloatField(verbose_name="Time Interval")
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+', verbose_name="Time Units",
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.DO_NOTHING)
-    samplingFeatureName = models.CharField(verbose_name='sampling feature name', max_length=255, blank=True, null=True)
-    samplingFeatureType = models.ForeignKey(CvSamplingFeatureType, db_column='samplingFeatureTypeCV',
-                                            on_delete=models.DO_NOTHING)
-    processingLevelCode = models.CharField(verbose_name='processing level code', max_length=50)
-    variableCode = models.CharField(verbose_name='variable code', max_length=50)
-    unitsAbbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
-    aggregationStatisticName = models.CharField(max_length=255)
+    samplingfeaturename = models.CharField(verbose_name='sampling feature name', max_length=255, blank=True, null=True)
+    sampling_feature_type = models.ForeignKey(CvSamplingfeaturetype, db_column='samplingfeaturetypecv',
+                                              on_delete=models.DO_NOTHING)
+    processinglevelcode = models.CharField(verbose_name='processing level code', max_length=50)
+    variablecode = models.CharField(verbose_name='variable code', max_length=50)
+    unitsabbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
+    aggregationstatisticname = models.CharField(primary_key=True, max_length=255)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u"- %s" % self.dataValue
-        s += u"- %s" % self.qualityCodeCV
-        s += u"- %s" % self.valueDateTime
+        s = u"%s " % self.resultid
+        s += u"- %s" % self.datavalue
+        s += u"- %s" % self.qualitycodecv
+        s += u"- %s" % self.valuedatetime
         return s
 
     @staticmethod
-    def csv_header():
-        s = 'databaseId,'
+    def csvheader():
+        s = 'databaseid,'
         s += 'Date and Time,'
         s += 'sampling feature/location,'
         return s
 
     def email_text(self):
         s = '{0} -unit-{1}-processing level-{2} '.format(
-            self.variableCode,
-            self.unitsAbbreviation,
-            self.processingLevelCode)
-        s += 'location- {0}'.format(self.samplingFeatureName)
+            self.variablecode,
+            self.unitsabbreviation,
+            self.processinglevelcode)
+        s += 'location- {0}'.format(self.samplingfeaturename)
         return s
 
-    def csv_header_short(self):
+    def csvheaderShort(self):
         s = 'method,'
         s += '\" {0} -unit-{1}-processing level-{2}\",'.format(
-            self.variableCode,
-            self.unitsAbbreviation,
-            self.processingLevelCode)
+            self.variablecode,
+            self.unitsabbreviation,
+            self.processinglevelcode)
         s += 'quality code,'
         return s
 
-    def csv_output(self):
-        s = str(self.valueId)
-        s += ', {0}'.format(self.valueDateTime)
-        s += ',\" {0}\"'.format(
-            self.samplingFeatureName)
+    def csvoutput(self):
+        s = str(self.valueid)
+        s += ', {0}'.format(self.valuedatetime)
+        s += ',\" {0}\"'.format(self.samplingfeaturename)
         return s
 
-    def csv_output_short(self):
-        s = '\" {0}\",'.format(
-            self.resultId.resultId.featureActionId.action.method.methodCode)
-        s += '{0},'.format(self.dataValue)
-        s += '{0},'.format(self.qualityCodeCV)
+    def csvoutputShort(self):
+        s = '\" {0}\",'.format(self.resultid.resultid.featureactionid.action.method.methodcode)
+        s += '{0},'.format(self.datavalue)
+        s += '{0},'.format(self.qualitycodecv)
         return s
 
     class Meta:
         managed = False
-        db_table = 'ODM2EXTRA.TimeSeriesResultValuesExt'
+        db_table = r'odm2extra.timeseriesresultvaluesext'
         verbose_name = 'time series result value'
 
 
-# ======================================================================================================================
-# Time series result values extra annotations table
-# ======================================================================================================================
-class TimeSeriesResultValuesExtAnnotations(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.IntegerField()
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    censorCodeCV = models.CharField(max_length=255)
-    qualityCodeCV = models.CharField(max_length=255)
-    timeAggregationInterval = models.FloatField(verbose_name="Time Interval")
-    timeAggregationIntervalUnitsId = models.IntegerField()
-    samplingFeatureName = models.CharField(verbose_name='sampling feature name', max_length=255, blank=True, null=True)
-    samplingFeatureTypeCV = models.CharField(max_length=255)
-    processingLevelCode = models.CharField(verbose_name='processing level code', max_length=50)
-    variableCode = models.CharField(verbose_name='variable code', max_length=50)
-    unitsAbbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
-    aggregationStatisticName = models.CharField(max_length=255)
-    annotationText = models.CharField(max_length=500)
+class Timeseriesresultvaluesextwannotations(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.IntegerField()
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    censorcodecv = models.CharField(max_length=255)
+    qualitycodecv = models.CharField(max_length=255)
+    timeaggregationinterval = models.FloatField(verbose_name="Time Interval")
+    timeaggregationintervalunitsid = models.IntegerField()
+    samplingfeaturename = models.CharField(verbose_name='sampling feature name', max_length=255, blank=True, null=True)
+    samplingfeaturetypecv = models.CharField(max_length=255)
+    processinglevelcode = models.CharField(verbose_name='processing level code', max_length=50)
+    variablecode = models.CharField(verbose_name='variable code', max_length=50)
+    unitsabbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
+    aggregationstatisticname = models.CharField(primary_key=True, max_length=255)
+    annotationtext = models.CharField(max_length=500)
 
     def __str__(self):
-        s = u"%s " % self.resultId
-        s += u"- %s" % self.dataValue
-        s += u"- %s" % self.qualityCodeCV
-        s += u"- %s" % self.valueDateTime
+        s = u"%s " % self.resultid
+        s += u"- %s" % self.datavalue
+        s += u"- %s" % self.qualitycodecv
+        s += u"- %s" % self.valuedatetime
         return s
 
     @staticmethod
-    def csv_header():
+    def csvheader():
         s = 'Date and Time,'
         s += 'sampling feature/location,'
         s += 'citation,'
         return s
 
-    def cs_voutput(self):
-        s = '{0}'.format(self.valueDateTime)
-        s += ',\" {0}\"'.format(
-            self.samplingFeatureName)
+    def csvoutput(self):
+        s = '{0}'.format(self.valuedatetime)
+        s += ',\" {0}\"'.format(self.samplingfeaturename)
         s += ','
         s = build_citation(s, self)
         return s
 
     def email_text(self):
         s = '{0} -unit-{1}-processing level-{2} '.format(
-            self.variableCode,
-            self.unitsAbbreviation,
-            self.processingLevelCode)
-        s += 'location- {0}'.format(self.samplingFeatureName)
+            self.variablecode,
+            self.unitsabbreviation,
+            self.processinglevelcode)
+        s += 'location- {0}'.format(self.samplingfeaturename)
         return s
 
-    def csv_header_short(self):
-        s = '\" {0} -unit-{1}-processing level-{2}\",'.format(self.variableCode, self.unitsAbbreviation,
-                                                              self.processingLevelCode)
+    def csvheaderShort(self):
+        s = '\" {0} -unit-{1}-processing level-{2}\",'.format(
+            self.variablecode,
+            self.unitsabbreviation,
+            self.processinglevelcode)
         s += 'quality code,'
         s += 'quality annotation,'
         return s
 
-    def csv_output_short(self):
-        s = '{0},'.format(self.dataValue)
-        s += '{0},'.format(self.qualityCodeCV)
-        if self.annotationText:
-            s += '\"{0} \",'.format(self.annotationText)
+    def csvoutputShort(self):
+        s = '{0},'.format(self.datavalue)
+        s += '{0},'.format(self.qualitycodecv)
+        if self.annotationtext:
+            s += '\"{0} \",'.format(self.annotationtext)
+        else:
             s += ','
         return s
 
     class Meta:
         managed = False
-        db_table = 'ODM2EXTRA.TimeSeriesResultValuesExtwAnnotations'
+        db_table = r'odm2extra"."timeseriesresultvaluesextwannotations'
         verbose_name = 'time series result value'
 
 
-# ======================================================================================================================
-# Trajectory results table
-# ======================================================================================================================
-class TrajectoryResults(models.Model):
-    resultId = models.OneToOneField(Results, db_column='resultId', primary_key=True, on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey(SpatialReferences, db_column='spatialReferenceId', blank=True, null=True,
+class Trajectoryresults(models.Model):
+    resultid = models.OneToOneField(Results, db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    spatialreferenceid = models.ForeignKey(Spatialreferences, db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedTrajectorySpacing = models.FloatField(blank=True, null=True)
-    intendedTrajectorySpacingUnitsId = models.ForeignKey('Units', related_name='+',
-                                                         db_column='intendedTrajectorySpacingUnitsId',
+    intendedtrajectoryspacing = models.FloatField(blank=True, null=True)
+    intendedtrajectoryspacingunitsid = models.ForeignKey('Units', related_name='+',
+                                                         db_column='intendedtrajectoryspacingunitsid',
                                                          blank=True, null=True, on_delete=models.CASCADE)
-    intendedTimeSpacing = models.FloatField(blank=True, null=True)
-    intendedTimeSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedTimeSpacingUnitsId',
+    intendedtimespacing = models.FloatField(blank=True, null=True)
+    intendedtimespacingunitsid = models.ForeignKey('Units', related_name='+', db_column='intendedtimespacingunitsid',
                                                    blank=True, null=True, on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TrajectoryResults'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TrajectoryResults'
+        else:
+            db_table = r'trajectoryresults'
 
 
-# ======================================================================================================================
-# Trajectory result value annotations table
-# ======================================================================================================================
-class TrajectoryResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('TrajectoryResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Trajectoryresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Trajectoryresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TrajectoryResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TrajectoryResultValueAnnotations'
+        else:
+            db_table = r'trajectoryresultvalueannotations'
 
 
-# ======================================================================================================================
-# Trajectory result values table
-# ======================================================================================================================
-class TrajectoryResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(TrajectoryResults, db_column='resultId', on_delete=models.CASCADE)
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.IntegerField()
-    xLocation = models.FloatField()
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId',
+class Trajectoryresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Trajectoryresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.IntegerField()
+    xlocation = models.FloatField()
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid',
                                          on_delete=models.CASCADE)
-    yLocation = models.FloatField()
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId',
+    ylocation = models.FloatField()
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid',
                                          on_delete=models.CASCADE)
-    zLocation = models.FloatField()
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId',
+    zlocation = models.FloatField()
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid',
                                          on_delete=models.CASCADE)
-    trajectoryDistance = models.FloatField()
-    trajectoryDistanceAggregationInterval = models.FloatField()
-    trajectoryDistanceUnitsId = models.ForeignKey('Units', related_name='+', db_column='trajectoryDistanceUnitsId',
+    trajectorydistance = models.FloatField()
+    trajectorydistanceaggregationinterval = models.FloatField()
+    trajectorydistanceunitsid = models.ForeignKey('Units', related_name='+', db_column='trajectorydistanceunitsid',
                                                   on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField()
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+',
-                                                       db_column='timeAggregationIntervalUnitsId',
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
+    timeaggregationinterval = models.FloatField()
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+',
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TrajectoryResultValues'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TrajectoryResultValues'
+        else:
+            db_table = r'trajectoryresultvalues'
 
 
-# ======================================================================================================================
-# Transect results table
-# ======================================================================================================================
-class TransectResults(models.Model):
-    resultId = models.OneToOneField(Results, db_column='resultid', primary_key=True,
-                                    on_delete=models.CASCADE)
-    zLocation = models.FloatField(blank=True, null=True)
-    zLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='zLocationUnitsId', blank=True, null=True,
+class Transectresults(models.Model):
+    resultid = models.OneToOneField(Results, db_column='resultid', primary_key=True, on_delete=models.CASCADE)
+    zlocation = models.FloatField(blank=True, null=True)
+    zlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='zlocationunitsid', blank=True, null=True,
                                          on_delete=models.CASCADE)
-    spatialReferenceId = models.ForeignKey(SpatialReferences, db_column='spatialReferenceId', blank=True, null=True,
+    spatialreferenceid = models.ForeignKey(Spatialreferences, db_column='spatialreferenceid', blank=True, null=True,
                                            on_delete=models.CASCADE)
-    intendedTransectSpacing = models.FloatField(blank=True, null=True)
-    intendedTransectSpacingUnitsId = models.ForeignKey('Units', related_name='+',
-                                                       db_column='intendedTransectSpacingUnitsId', blank=True,
+    intendedtransectspacing = models.FloatField(blank=True, null=True)
+    intendedtransectspacingunitsid = models.ForeignKey('Units', related_name='+',
+                                                       db_column='intendedtransectspacingunitsid', blank=True,
                                                        null=True, on_delete=models.CASCADE)
-    intendedTimeSpacing = models.FloatField(blank=True, null=True)
-    intendedTimeSpacingUnitsId = models.ForeignKey('Units', related_name='+', db_column='intendedTimeSpacingUnitsId',
-                                                   blank=True, null=True, on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    intendedtimespacing = models.FloatField(blank=True, null=True)
+    intendedtimespacingunitsid = models.ForeignKey('Units', related_name='+',
+                                                   db_column='intendedtimespacingunitsid', blank=True, null=True,
+                                                   on_delete=models.CASCADE)
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TransectResults'
+
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TransectResults'
+        else:
+            db_table = r'transectresults'
 
 
-# ======================================================================================================================
-# Trasect result value annotations table
-# ======================================================================================================================
-class TransectResultValueAnnotations(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    valueId = models.ForeignKey('TransectResultValues', db_column='valueId', on_delete=models.CASCADE)
-    annotationId = models.ForeignKey(Annotations, db_column='annotationId', on_delete=models.CASCADE)
+class Transectresultvalueannotations(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    valueid = models.ForeignKey('Transectresultvalues', db_column='valueid', on_delete=models.CASCADE)
+    annotationid = models.ForeignKey(Annotations, db_column='annotationid', on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TransectResultValueAnnotations'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TransectResultValueAnnotations'
+        else:
+            db_table = r'transectresultvalueannotations'
 
 
-# ======================================================================================================================
-# Transect result values table
-# ======================================================================================================================
-class TransectResultValues(models.Model):
-    valueId = models.AutoField(primary_key=True)
-    resultId = models.ForeignKey(TransectResults, db_column='resultId', on_delete=models.CASCADE)
-    dataValue = models.FloatField()
-    valueDateTime = models.DateTimeField()
-    valueDateTimeUtcOffset = models.DateTimeField()
-    xLocation = models.FloatField()
-    xLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='xLocationUnitsId',
+class Transectresultvalues(models.Model):
+    valueid = models.AutoField(primary_key=True)
+    resultid = models.ForeignKey(Transectresults, db_column='resultid', on_delete=models.CASCADE)
+    datavalue = models.FloatField()
+    valuedatetime = models.DateTimeField()
+    valuedatetimeutcoffset = models.DateTimeField()
+    xlocation = models.FloatField()
+    xlocationunitsid = models.ForeignKey('Units', related_name='+', db_column='xlocationunitsid',
                                          on_delete=models.CASCADE)
-    yLocation = models.FloatField()
-    yLocationUnitsId = models.ForeignKey('Units', related_name='+', db_column='yLocationUnitsId',
+    ylocation = models.FloatField()
+    ylocationunitsid = models.ForeignKey('Units', related_name='+', db_column='ylocationunitsid',
                                          on_delete=models.CASCADE)
-    transectDistance = models.FloatField()
-    transectDistanceAggregationInterval = models.FloatField()
-    transectDistanceUnitsId = models.ForeignKey('Units', related_name='+', db_column='transectDistanceUnitsId',
+    transectdistance = models.FloatField()
+    transectdistanceaggregationinterval = models.FloatField()
+    transectdistanceunitsid = models.ForeignKey('Units', related_name='+', db_column='transectdistanceunitsid',
                                                 on_delete=models.CASCADE)
-    censorCodeCV = models.ForeignKey(CvCensorCode, db_column='censorCodeCV', on_delete=models.CASCADE)
-    qualityCodeCV = models.ForeignKey(CvQualityCode, db_column='qualityCodeCV', on_delete=models.CASCADE)
-    aggregationStatisticCV = models.ForeignKey(CvAggregationStatistic, db_column='aggregationStatisticCV',
+    censorcodecv = models.ForeignKey(CvCensorcode, db_column='censorcodecv', on_delete=models.CASCADE)
+    qualitycodecv = models.ForeignKey(CvQualitycode, db_column='qualitycodecv', on_delete=models.CASCADE)
+    aggregationstatisticcv = models.ForeignKey(CvAggregationstatistic, db_column='aggregationstatisticcv',
                                                on_delete=models.CASCADE)
-    timeAggregationInterval = models.FloatField()
-    timeAggregationIntervalUnitsId = models.ForeignKey('Units', related_name='+',
-                                                       db_column='timeAggregationIntervalUnitsId',
+    timeaggregationinterval = models.FloatField()
+    timeaggregationintervalunitsid = models.ForeignKey('Units', related_name='+',
+                                                       db_column='timeaggregationintervalunitsid',
                                                        on_delete=models.CASCADE)
 
     class Meta:
         managed = False
-        db_table = 'TransectResultValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'TransectResultValues'
+        else:
+            db_table = r'transectresultvalues'
 
 
-# ======================================================================================================================
-# Units table
-# ======================================================================================================================
 class Units(models.Model):
-    unitsId = models.AutoField(primary_key=True)
-    unit_type = models.ForeignKey(CvUnitsType,
+    unitsid = models.AutoField(primary_key=True)
+    unit_type = models.ForeignKey(CvUnitstype,
                                   help_text="A vocabulary for describing the type of the Unit "
                                             "or the more general quantity that the Unit "
                                             "represents. View unit type details here "
-                                            "http://vocabulary.org/unitstype/",
-                                  db_column='unitsTypeCV', on_delete=models.CASCADE)
-    unitsAbbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
-    unitsName = models.CharField(verbose_name='unit name', max_length=255)
-    unitsLink = models.CharField(verbose_name='reference for the unit (web link)', max_length=255, blank=True)
+                                            "http://vocabulary.odm2.org/unitstype/",
+                                  db_column='unitstypecv', on_delete=models.CASCADE)
+    unitsabbreviation = models.CharField(verbose_name='unit abbreviation', max_length=50)
+    unitsname = models.CharField(verbose_name='unit name', max_length=255)
+    unitslink = models.CharField(verbose_name='reference for the unit (web link)', max_length=255, blank=True)
 
     def __str__(self):
-        s = u"%s" % self.unitsAbbreviation
-        if self.unitsName:
-            s += u"- %s" % self.unitsName
+        s = u"%s" % self.unitsabbreviation
+        if self.unitsname:
+            s += u"- %s" % self.unitsname
         return s
 
     class Meta:
         managed = False
-        ordering = ('unitsAbbreviation', 'unitsName',)
-        db_table = 'Units'
+        ordering = ('unitsabbreviation', 'unitsname',)
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Units'
+        else:
+            db_table = r'units'
         verbose_name = 'unit'
 
 
-# ======================================================================================================================
-# Variable extension property values table
-# ======================================================================================================================
-class VariableExtensionPropertyValues(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    variableId = models.ForeignKey('Variables', db_column='variableId', on_delete=models.CASCADE)
-    propertyId = models.ForeignKey(ExtensionProperties, db_column='propertyId', on_delete=models.CASCADE)
-    propertyValue = models.CharField(max_length=255)
+class Variableextensionpropertyvalues(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    variableid = models.ForeignKey('Variables', db_column='variableid', on_delete=models.CASCADE)
+    propertyid = models.ForeignKey(Extensionproperties, db_column='propertyid', on_delete=models.CASCADE)
+    propertyvalue = models.CharField(max_length=255)
 
     class Meta:
         managed = False
-        db_table = 'VariableExtensionPropertyValues'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'VariableExtensionPropertyValues'
+        else:
+            db_table = r'variableextensionpropertyvalues'
 
 
-# ======================================================================================================================
-# Variable external identifiers table
-# ======================================================================================================================
-class VariableExternalIdentifiers(models.Model):
-    bridgeId = models.AutoField(primary_key=True)
-    variableId = models.ForeignKey('Variables', db_column='variableId', on_delete=models.CASCADE)
-    externalIdentifierSystemId = models.ForeignKey(ExternalIdentifierSystems, db_column='externalIdentifierSystemId',
+class Variableexternalidentifiers(models.Model):
+    bridgeid = models.AutoField(primary_key=True)
+    variableid = models.ForeignKey('Variables', db_column='variableid', on_delete=models.CASCADE)
+    externalidentifiersystemid = models.ForeignKey(Externalidentifiersystems, db_column='externalidentifiersystemid',
                                                    on_delete=models.CASCADE)
-    variableExternalIdentifier = models.CharField(max_length=255)
-    variableExternalIdentifierURI = models.CharField(max_length=255, blank=True)
+    variableexternalidentifier = models.CharField(max_length=255)
+    variableexternalidentifieruri = models.CharField(max_length=255, blank=True)
 
     class Meta:
         managed = False
-        db_table = 'VariableExternalIdentifiers'
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'VariableExternalIdentifiers'
+        else:
+            db_table = r'variableexternalidentifiers'
 
 
-# ======================================================================================================================
-# Variables table
-# ======================================================================================================================
 class Variables(models.Model):
-    variableId = models.AutoField(primary_key=True)
-    variableType = models.ForeignKey(CvVariableType, help_text="view variable types here "
-                                                               "http://vocabulary.org/variabletype/ ",
-                                     db_column='variableTypeCV', on_delete=models.CASCADE)
-    variableCode = models.CharField(verbose_name='variable code', max_length=50)
-    variableName = models.ForeignKey(CvVariableName, help_text="view variable names here "
-                                                               "http://vocabulary.org/variablename/",
-                                     db_column='variableNameCV', on_delete=models.CASCADE)
-    variableDefinition = models.CharField(verbose_name='variable definition', max_length=500, blank=True)
-    speciation = models.ForeignKey(CvSpeciation, db_column='speciationCV', blank=True, null=True,
+    variableid = models.AutoField(primary_key=True)
+    variable_type = models.ForeignKey(CvVariabletype,
+                                      help_text="view variable types here http://vocabulary.odm2.org/variabletype/ ",
+                                      db_column='variabletypecv', on_delete=models.CASCADE)
+    variablecode = models.CharField(verbose_name='variable code', max_length=50)
+    variable_name = models.ForeignKey(CvVariablename,
+                                      help_text="view variable names here http://vocabulary.odm2.org/variablename/",
+                                      db_column='variablenamecv',
+                                      on_delete=models.CASCADE)
+    variabledefinition = models.CharField(verbose_name='variable definition', max_length=500, blank=True)
+    speciation = models.ForeignKey(CvSpeciation, db_column='speciationcv', blank=True, null=True,
                                    on_delete=models.CASCADE)
-    noDataValue = models.FloatField(verbose_name='no data value')
+    nodatavalue = models.FloatField(verbose_name='no data value')
 
     def __str__(self):
-        s = "%s" % self.variableCode
-        if self.variableDefinition:
-            s += " - %s" % self.variableDefinition[:20]
+        s = "%s" % self.variablecode
+        if self.variabledefinition:
+            s += " - %s" % self.variabledefinition[:20]
         return s
 
     class Meta:
         managed = False
-        ordering = ('variableCode', 'variableName',)
-        db_table = 'Variables'
+        ordering = ('variablecode', 'variable_name',)
+        _exportdb = settings.EXPORTDB
+        if _exportdb:
+            db_table = r'Variables'
+        else:
+            db_table = r'variables'
         verbose_name = 'variable'
